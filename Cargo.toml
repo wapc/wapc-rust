@@ -1,0 +1,28 @@
+[package]
+name = "wapc"
+version = "0.0.1"
+authors = ["Kevin Hoffman <alothien@gmail.com>"]
+edition = "2018"
+description = "Rust WebAssembly Host Runtime Conforming to the waPC Standard"
+license = "Apache-2.0"
+homepage = "https://wascap.io"
+documentation = "https://docs.rs/wapc"
+readme = "README.md"
+keywords = ["sdk", "wapc", "webassembly", "wasm", "waxosuit"]
+categories = ["wasm", "api-bindings"]
+
+[badges]
+travis-ci = { repository = "wapc/wapc-rust", branch = "master" }
+
+[dependencies]
+wasmer-runtime = "0.6.0"
+wasmer-runtime-core = "0.6.0"
+prost = "0.5.0"
+bytes = "0.4.12"
+log = "0.4.8"
+env_logger = "0.6"
+lazy_static = "1.4.0"
+quicli = "0.4"
+serde = "1.0.100"
+serde_derive = "1.0.100"
+serde_json = "1.0.40"

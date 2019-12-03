@@ -25,7 +25,9 @@ pub fn handle_wapc(operation: &str, msg: &[u8]) -> CallResult {
     }
 }
 
-fn hello_world(_msg: &[u8]) -> CallResult {
-    let _res = host_call("wapc:sample!Ping", b"PING")?;
+// This function emits directly to the console, which requires a WASI host runtime
+fn hello_world(msg: &[u8]) -> CallResult {
+    let _res = host_call("wapc:sample!Ping", msg)?;
+    println!("Hello from inside the WASI module!");
     Ok(b"hello world!".to_vec())
 }

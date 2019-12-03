@@ -4,7 +4,7 @@
 
 # waPC
 
-This is the Rust implementation of the **waPC** standard for WebAssembly host runtimes. It allows any WebAssembly module to be loaded as a guest and receive requests for invocation as well as to make its own function requests of the host.
+This is the Rust implementation of the **waPC** standard for WebAssembly host runtimes. It allows any WebAssembly module to be loaded as a guest and receive requests for invocation as well as to make its own function requests of the host. This library allows for both "pure" (completely isolated) wasm modules as well as WASI modules
 
 ## Example
 The following is a simple example of synchronous, bi-directional procedure calls between a WebAssembly host runtime and the guest module.

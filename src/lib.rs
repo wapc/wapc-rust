@@ -64,12 +64,6 @@
 #[macro_use]
 extern crate log;
 
-#[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
-extern crate anyhow;
-
 mod callbacks;
 pub mod errors;
 pub mod prelude;
@@ -81,11 +75,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use wasmtime::Func;
 use wasmtime::Instance;
-//use wasmer_runtime::{func, imports, instantiate, Ctx, Func, ImportObject, Instance, Memory};
-//use wasmer_runtime_core::vm::InternalField;
-//use wasmer_wasi::generate_import_object_for_version;
+
 use std::cell::RefCell;
-pub use wasmer_wasi::WasiVersion;
+
 
 use crate::callbacks::Callback;
 use crate::callbacks::ModuleState;
@@ -153,7 +145,7 @@ pub struct WasiParams {
     envs: Vec<Vec<u8>>,
     preopened_files: Vec<PathBuf>,
     mapped_dirs: Vec<(String, PathBuf)>,
-    wasi_version: WasiVersion,
+    //wasi_version: WasiVersion,
 }
 
 impl WasiParams {
@@ -168,7 +160,7 @@ impl WasiParams {
             envs,
             preopened_files,
             mapped_dirs,
-            wasi_version: WasiVersion::Snapshot0,
+           // wasi_version: WasiVersion::Snapshot0,
         }
     }
 
@@ -177,14 +169,14 @@ impl WasiParams {
         envs: Vec<Vec<u8>>,
         preopened_files: Vec<PathBuf>,
         mapped_dirs: Vec<(String, PathBuf)>,
-        wasi_version: WasiVersion,
+        //wasi_version: WasiVersion,
     ) -> Self {
         WasiParams {
             args,
             envs,
             preopened_files,
             mapped_dirs,
-            wasi_version,
+           // wasi_version,
         }
     }
 }

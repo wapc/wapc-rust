@@ -16,9 +16,6 @@ exclude = [".assets"]
 travis-ci = { repository = "wapc/wapc-rust", branch = "master" }
 
 [dependencies]
-wasmer-runtime = "0.11.0"
-wasmer-runtime-core = "0.11.0"
-wasmer-wasi = "0.11.0"
 prost = "0.5.0"
 bytes = "0.5.3"
 log = "0.4.10"

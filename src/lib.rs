@@ -71,13 +71,12 @@ pub mod prelude;
 /// A result type for errors that occur within the wapc library
 pub type Result<T> = std::result::Result<T, errors::Error>;
 
-use std::path::PathBuf;
+use std::fs::File;
 use std::sync::atomic::{AtomicU64, Ordering};
 use wasmtime::Func;
 use wasmtime::Instance;
 
 use std::cell::RefCell;
-
 
 use crate::callbacks::Callback;
 use crate::callbacks::ModuleState;
@@ -100,7 +99,6 @@ macro_rules! call {
   }
 
 static GLOBAL_MODULE_COUNT: AtomicU64 = AtomicU64::new(1);
-//static ID_INTERNAL: InternalField = InternalField::allocate();
 
 const HOST_NAMESPACE: &str = "wapc";
 
@@ -139,44 +137,23 @@ impl Invocation {
 }
 
 /// Stores the parameters required to create a WASI instance
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WasiParams {
-    args: Vec<Vec<u8>>,
-    envs: Vec<Vec<u8>>,
-    preopened_files: Vec<PathBuf>,
-    mapped_dirs: Vec<(String, PathBuf)>,
-    //wasi_version: WasiVersion,
+    argv: Vec<String>,
+    environment: Vec<(String, String)>,
+    preopened_dirs: Vec<(String, File)>,
 }
 
 impl WasiParams {
     pub fn new(
-        args: Vec<Vec<u8>>,
-        envs: Vec<Vec<u8>>,
-        preopened_files: Vec<PathBuf>,
-        mapped_dirs: Vec<(String, PathBuf)>,
+        argv: Vec<String>,
+        environment: Vec<(String, String)>,
+        preopened_dirs: Vec<(String, File)>,
     ) -> Self {
         WasiParams {
-            args,
-            envs,
-            preopened_files,
-            mapped_dirs,
-           // wasi_version: WasiVersion::Snapshot0,
-        }
-    }
-
-    pub fn new_with_version(
-        args: Vec<Vec<u8>>,
-        envs: Vec<Vec<u8>>,
-        preopened_files: Vec<PathBuf>,
-        mapped_dirs: Vec<(String, PathBuf)>,
-        //wasi_version: WasiVersion,
-    ) -> Self {
-        WasiParams {
-            args,
-            envs,
-            preopened_files,
-            mapped_dirs,
-           // wasi_version,
+            argv,
+            environment,
+            preopened_dirs,
         }
     }
 }
@@ -206,7 +183,8 @@ impl WapcHost {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
         let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
         let instance_ref = Rc::new(RefCell::new(None));
-        let instance = WapcHost::instance_from_buffer(buf, instance_ref.clone(), state.clone());
+        let instance =
+            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone());
         instance_ref.replace(Some(instance));
         let mh = WapcHost {
             state,
@@ -222,34 +200,6 @@ impl WapcHost {
     pub fn id(&self) -> u64 {
         self.state.borrow().id
     }
-
-    /// Creates a new instance of a waPC-compliant WebAssembly host runtime that also
-    /// allows the module to utilize the WASI interface. This function allows you to
-    /// choose a specific WASI interface version to use when loading the WebAssembly module
-    /*pub fn new_wasi_with_version(
-        wasi_version: WasiVersion,
-        buf: &[u8],
-        args: Vec<Vec<u8>>,
-        envs: Vec<Vec<u8>>,
-        preopened_files: Vec<PathBuf>,
-        mapped_dirs: Vec<(String, PathBuf)>,
-    ) -> Result<WapcHost> {
-        let wd = WasiParams {
-            args,
-            envs,
-            preopened_files,
-            mapped_dirs,
-            wasi_version,
-        };
-
-        let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
-        let mh = WapcHost {
-            id,
-            instance: create_instance_from_buf(id, buf, Some(wd.clone()))?,
-            wasidata: Some(wd),
-        };
-        Ok(mh)
-    } */
 
     /// Invokes the `__guest_call` function within the guest module as per the waPC specification.
     /// Provide an operation name and an opaque payload of bytes and the function returns a `Result`
@@ -316,13 +266,15 @@ impl WapcHost {
             module.len()
         );
         let state = self.state.clone();
-        let new_instance = WapcHost::instance_from_buffer(module, self.instance.clone(), state);
+        let new_instance =
+            WapcHost::instance_from_buffer(module, &self.wasidata, self.instance.clone(), state);
         self.instance.borrow_mut().replace(new_instance);
         Ok(())
     }
 
     fn instance_from_buffer(
         buf: &[u8],
+        _wasi: &Option<WasiParams>,
         instance_ref: Rc<RefCell<Option<Instance>>>,
         state: Rc<RefCell<ModuleState>>,
     ) -> Instance {
@@ -335,6 +287,7 @@ impl WapcHost {
         wasmtime::Instance::new(&store, &module, imports.as_slice()).unwrap()
     }
 
+    // TODO: make this cacheable
     fn guest_call_fn(&self) -> Result<HostRef<Func>> {
         if let Some(ext) = self
             .instance

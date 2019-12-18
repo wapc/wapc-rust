@@ -27,7 +27,7 @@ pub fn new(kind: ErrorKind) -> Error {
 #[derive(Debug)]
 pub enum ErrorKind {
     NoSuchFunction(String),
-    IO(std::io::Error),    
+    IO(std::io::Error),
     WasmMisc(String),
     HostCallFailure(Box<dyn StdError>),
     GuestCallFailure(String),
@@ -47,7 +47,7 @@ impl StdError for Error {
     fn description(&self) -> &str {
         match *self.0 {
             ErrorKind::NoSuchFunction(_) => "No such function in Wasm module",
-            ErrorKind::IO(_) => "I/O error",            
+            ErrorKind::IO(_) => "I/O error",
             ErrorKind::WasmMisc(_) => "WebAssembly failure",
             ErrorKind::HostCallFailure(_) => "Error occurred during host call",
             ErrorKind::GuestCallFailure(_) => "Guest call failure",
@@ -57,7 +57,7 @@ impl StdError for Error {
     fn cause(&self) -> Option<&dyn StdError> {
         match *self.0 {
             ErrorKind::NoSuchFunction(_) => None,
-            ErrorKind::IO(ref err) => Some(err),            
+            ErrorKind::IO(ref err) => Some(err),
             ErrorKind::WasmMisc(_) => None,
             ErrorKind::HostCallFailure(_) => None,
             ErrorKind::GuestCallFailure(_) => None,
@@ -71,7 +71,7 @@ impl fmt::Display for Error {
             ErrorKind::NoSuchFunction(ref fname) => {
                 write!(f, "No such function in Wasm module: {}", fname)
             }
-            ErrorKind::IO(ref err) => write!(f, "I/O error: {}", err),            
+            ErrorKind::IO(ref err) => write!(f, "I/O error: {}", err),
             ErrorKind::WasmMisc(ref err) => write!(f, "WebAssembly error: {}", err),
             ErrorKind::HostCallFailure(ref err) => {
                 write!(f, "Error occurred during host call: {}", err)

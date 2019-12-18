@@ -28,9 +28,7 @@ pub fn new(kind: ErrorKind) -> Error {
 pub enum ErrorKind {
     NoSuchFunction(String),
     IO(std::io::Error),
-    WasmRuntime(wasmer_runtime_core::error::RuntimeError),
-    WasmMisc(wasmer_runtime_core::error::Error),
-    WasmEntityResolution(wasmer_runtime_core::error::ResolveError),
+    WasmMisc(String),
     HostCallFailure(Box<dyn StdError>),
     GuestCallFailure(String),
 }
@@ -50,8 +48,6 @@ impl StdError for Error {
         match *self.0 {
             ErrorKind::NoSuchFunction(_) => "No such function in Wasm module",
             ErrorKind::IO(_) => "I/O error",
-            ErrorKind::WasmRuntime(_) => "WebAssembly runtime error",
-            ErrorKind::WasmEntityResolution(_) => "WebAssembly entity resolution failure",
             ErrorKind::WasmMisc(_) => "WebAssembly failure",
             ErrorKind::HostCallFailure(_) => "Error occurred during host call",
             ErrorKind::GuestCallFailure(_) => "Guest call failure",
@@ -62,9 +58,7 @@ impl StdError for Error {
         match *self.0 {
             ErrorKind::NoSuchFunction(_) => None,
             ErrorKind::IO(ref err) => Some(err),
-            ErrorKind::WasmRuntime(ref err) => Some(err),
-            ErrorKind::WasmEntityResolution(ref err) => Some(err),
-            ErrorKind::WasmMisc(ref err) => Some(err),
+            ErrorKind::WasmMisc(_) => None,
             ErrorKind::HostCallFailure(_) => None,
             ErrorKind::GuestCallFailure(_) => None,
         }
@@ -78,10 +72,6 @@ impl fmt::Display for Error {
                 write!(f, "No such function in Wasm module: {}", fname)
             }
             ErrorKind::IO(ref err) => write!(f, "I/O error: {}", err),
-            ErrorKind::WasmRuntime(ref err) => write!(f, "WebAssembly runtime error: {}", err),
-            ErrorKind::WasmEntityResolution(ref err) => {
-                write!(f, "WebAssembly entity resolution error: {}", err)
-            }
             ErrorKind::WasmMisc(ref err) => write!(f, "WebAssembly error: {}", err),
             ErrorKind::HostCallFailure(ref err) => {
                 write!(f, "Error occurred during host call: {}", err)
@@ -94,23 +84,5 @@ impl fmt::Display for Error {
 impl From<std::io::Error> for Error {
     fn from(source: std::io::Error) -> Error {
         Error(Box::new(ErrorKind::IO(source)))
-    }
-}
-
-impl From<wasmer_runtime_core::error::RuntimeError> for Error {
-    fn from(source: wasmer_runtime_core::error::RuntimeError) -> Error {
-        Error(Box::new(ErrorKind::WasmRuntime(source)))
-    }
-}
-
-impl From<wasmer_runtime_core::error::Error> for Error {
-    fn from(source: wasmer_runtime_core::error::Error) -> Error {
-        Error(Box::new(ErrorKind::WasmMisc(source)))
-    }
-}
-
-impl From<wasmer_runtime_core::error::ResolveError> for Error {
-    fn from(source: wasmer_runtime_core::error::ResolveError) -> Error {
-        Error(Box::new(ErrorKind::WasmEntityResolution(source)))
     }
 }

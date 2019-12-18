@@ -28,17 +28,11 @@
 //! # }
 //! pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # env_logger::init();
-//!     let module = load_file();
-//!     let module_wasi = load_wasi_file();
-//!     let mut host = WapcHost::new(host_callback, &module, None)?;
+//!     let module_bytes = load_file();
+//!     let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
 //!
 //!     let res = host.call("wapc:sample!Hello", b"this is a test")?;
 //!     assert_eq!(res, b"hello world!");
-//!
-//!     // Create a WASI-compliant runtime host with no env vars, mapped dirs, etc.
-//!  //   let mut wasi_host = WapcHost::new(host_callback, &module_wasi, Some(WasiParams::new(vec![], vec![], vec![], vec![])))?;
-//!  //  let wasi_res = wasi_host.call("wapc:sample!Hello", b"this is a wasi test")?;
-//!  //   assert_eq!(wasi_res, b"hello world!");
 //!
 //!     Ok(())
 //! }

@@ -195,10 +195,12 @@ impl Callable for HostCall {
         };
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
-        let ptr = params[0].i32();
-        let len = params[1].i32();
-        let op_ptr = params[2].i32();
-        let op_len = params[3].i32();
+        
+        let op_ptr = params[0].i32();
+        let op_len = params[1].i32();
+        let ptr = params[2].i32();
+        let len = params[3].i32();
+        
 
         let vec = get_vec_from_memory(memory.clone(), ptr, len);
         let op_vec = get_vec_from_memory(memory, op_ptr, op_len);

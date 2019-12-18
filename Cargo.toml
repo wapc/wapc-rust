@@ -18,7 +18,7 @@ travis-ci = { repository = "wapc/wapc-rust", branch = "master" }
 [dependencies]
 prost = "0.5.0"
 bytes = "0.5.3"
-log = "0.4.10"
+log = "0.4.8"
 env_logger = "0.7"
 lazy_static = "1.4.0"
 serde = "1.0.104"

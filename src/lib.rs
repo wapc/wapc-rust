@@ -180,6 +180,9 @@ impl WapcHost {
         let instance =
             WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone());
         instance_ref.replace(Some(instance));
+        if wasi.is_some() {
+            error!("NOTE - WASI support is not yet enabled, but will be soon.");
+        }
         let mh = WapcHost {
             state,
             instance: instance_ref,

@@ -29,6 +29,11 @@ fn host_callback(op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error
 }
 ```
 
+To see a similar demo in action, enter the following in your shell:
+```
+$ cargo run --example demo
+```
+
 waPC utilizes the [Bytecode Alliance](https://bytecodealliance.org/) runtime [wasmtime](https://github.com/bytecodealliance/wasmtime) for low-level WebAssembly compilation and execution.
 
-**NOTE** - The current version of waPC does not support loading WASI modules. That is only a temporary limitation as other libraries go through refactoring.
+**NOTE** - The current version of waPC does not support loading WASI modules. That is only a temporary limitation expected to go away in the next version.

@@ -32,8 +32,8 @@ pub(crate) trait Callback<T> {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func>;
+        store: Store,
+    ) -> Func;
 }
 
 pub(crate) struct GuestRequest {
@@ -144,7 +144,7 @@ impl ConsoleLog {
 }
 
 impl Callable for GuestRequest {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[1].i32();
         let op_ptr = params[0].i32();
 
@@ -152,33 +152,33 @@ impl Callable for GuestRequest {
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
         if let Some(inv) = invocation {
-            write_bytes_to_memory(memory.clone(), ptr, &inv.msg);
-            write_bytes_to_memory(memory, op_ptr, &inv.operation.as_bytes());
+            write_bytes_to_memory(memory.clone(), ptr.unwrap(), &inv.msg);
+            write_bytes_to_memory(memory, op_ptr.unwrap(), &inv.operation.as_bytes());
         }
         Ok(())
     }
 }
 
 impl Callable for GuestResponse {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[0].i32();
         let len = params[1].i32();
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
-        let vec = get_vec_from_memory(memory, ptr, len);
+        let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
         self.state.borrow_mut().guest_response = Some(vec);
         Ok(())
     }
 }
 
 impl Callable for GuestError {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
         let ptr = params[0].i32();
         let len = params[1].i32();
 
-        let vec = get_vec_from_memory(memory, ptr, len);
+        let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
         self.state.borrow_mut().guest_error = Some(String::from_utf8(vec).unwrap());
 
         Ok(())
@@ -186,7 +186,7 @@ impl Callable for GuestError {
 }
 
 impl Callable for HostCall {
-    fn call(&self, params: &[Val], results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], results: &mut [Val]) -> std::result::Result<(), Trap> {
         let id = {
             let mut state = self.state.borrow_mut();
             state.host_response = None;
@@ -202,8 +202,8 @@ impl Callable for HostCall {
         let len = params[3].i32();
         
 
-        let vec = get_vec_from_memory(memory.clone(), ptr, len);
-        let op_vec = get_vec_from_memory(memory, op_ptr, op_len);
+        let vec = get_vec_from_memory(memory.clone(), ptr.unwrap(), len.unwrap());
+        let op_vec = get_vec_from_memory(memory, op_ptr.unwrap(), op_len.unwrap());
         let op = std::str::from_utf8(&op_vec).unwrap();
         info!(
             "Guest module {} invoking host call for operation {}",
@@ -231,7 +231,7 @@ impl Callable for HostCall {
 }
 
 impl Callable for HostResponseLen {
-    fn call(&self, _params: &[Val], results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, _params: &[Val], results: &mut [Val]) -> std::result::Result<(), Trap> {
         results[0] = Val::I32(match self.state.borrow().host_response {
             Some(ref r) => r.len() as _,
             None => 0,
@@ -241,19 +241,19 @@ impl Callable for HostResponseLen {
 }
 
 impl Callable for HostResponse {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         if let Some(ref e) = self.state.borrow().host_response {
             let memory =
                 get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
             let ptr = params[0].i32();
-            write_bytes_to_memory(memory, ptr, &e);
+            write_bytes_to_memory(memory, ptr.unwrap(), &e);
         }
         Ok(())
     }
 }
 
 impl Callable for HostErrorLen {
-    fn call(&self, _params: &[Val], results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, _params: &[Val], results: &mut [Val]) -> std::result::Result<(), Trap> {
         results[0] = Val::I32(match self.state.borrow().host_error {
             Some(ref e) => e.len() as _,
             None => 0,
@@ -262,24 +262,24 @@ impl Callable for HostErrorLen {
     }
 }
 impl Callable for HostError {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         if let Some(ref e) = self.state.borrow().host_error {
             let ptr = params[0].i32();
             let memory =
                 get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
-            write_bytes_to_memory(memory, ptr, e.as_bytes());
+            write_bytes_to_memory(memory, ptr.unwrap(), e.as_bytes());
         }
         Ok(())
     }
 }
 
 impl Callable for ConsoleLog {
-    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), HostRef<Trap>> {
+    fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[0].i32();
         let len = params[1].i32();
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
-        let vec = get_vec_from_memory(memory, ptr, len);
+        let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
 
         info!(
             "[{}] Wasm Guest: {}",
@@ -294,14 +294,14 @@ impl Callback<GuestRequest> for GuestRequest {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32, ValType::I32]), Box::new([]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(GuestRequest::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -309,14 +309,14 @@ impl Callback<GuestError> for GuestError {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32, ValType::I32]), Box::new([]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(GuestError::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -324,14 +324,14 @@ impl Callback<GuestResponse> for GuestResponse {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32, ValType::I32]), Box::new([]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(GuestResponse::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -339,14 +339,14 @@ impl Callback<HostResponse> for HostResponse {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32]), Box::new([]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(HostResponse::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -354,14 +354,14 @@ impl Callback<HostResponseLen> for HostResponseLen {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) ->Func {
         let callback_type = FuncType::new(Box::new([]), Box::new([ValType::I32]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(HostResponseLen::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -369,14 +369,14 @@ impl Callback<HostErrorLen> for HostErrorLen {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([]), Box::new([ValType::I32]));
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(HostErrorLen::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -384,14 +384,14 @@ impl Callback<HostError> for HostError {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store:Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32]), Box::new([]));
-        HostRef::new(Func::new(
-            store,
+       Func::new(
+            &store,
             callback_type,
             Rc::new(HostError::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -399,17 +399,17 @@ impl Callback<HostCall> for HostCall {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(
             Box::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32]),
             Box::new([ValType::I32]),
         );
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(HostCall::new(state, instance)),
-        ))
+        )
     }
 }
 
@@ -417,15 +417,16 @@ impl Callback<ConsoleLog> for ConsoleLog {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store: &HostRef<Store>,
-    ) -> HostRef<Func> {
+        store: Store,
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32, ValType::I32]), Box::new([]));
 
-        HostRef::new(Func::new(
-            store,
+        Func::new(
+            &store,
             callback_type,
             Rc::new(ConsoleLog::new(state, instance)),
-        ))
+        )
+        
     }
 }
 
@@ -433,15 +434,15 @@ fn get_export_memory(exports: &[Extern], i: usize) -> Result<HostRef<Memory>, an
     if exports.len() <= i {
         bail!("> Error accessing memory export {}!", i);
     }
-    Ok(exports[i]
+    Ok(HostRef::new(exports[i]
         .memory()
         .with_context(|| format!("> Error accessing memory export {}!", i))?
-        .clone())
+        .clone()))
 }
 
 fn get_vec_from_memory(mem: HostRef<Memory>, ptr: i32, len: i32) -> Vec<u8> {
     let mem = mem.borrow_mut();
-    let data = unsafe { mem.data() };
+    let data = unsafe { mem.data_unchecked_mut()};
     data[ptr as usize..(ptr + len) as usize]
         .iter()
         .copied()
@@ -450,7 +451,7 @@ fn get_vec_from_memory(mem: HostRef<Memory>, ptr: i32, len: i32) -> Vec<u8> {
 
 fn write_bytes_to_memory(memory: HostRef<Memory>, ptr: i32, slice: &[u8]) {
     let memory = memory.borrow_mut();
-    let data = unsafe { memory.data() };
+    let data = unsafe { memory.data_unchecked_mut() };
     // TODO: upgrade this to a faster memory write
     for idx in 0..slice.len() {
         data[idx + ptr as usize] = slice[idx];

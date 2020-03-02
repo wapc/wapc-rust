@@ -26,6 +26,6 @@ pub fn handle_wapc(operation: &str, msg: &[u8]) -> CallResult {
 }
 
 fn hello_world(_msg: &[u8]) -> CallResult {
-    let _res = host_call("wapc:sample!Ping", b"PING")?;
+    let _res = host_call("wapc:sample", "Ping", b"PING")?;
     Ok(b"hello world!".to_vec())
 }

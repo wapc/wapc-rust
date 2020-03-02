@@ -22,8 +22,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
      Ok(())
 }
 
-fn host_callback(id: u64, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-     println!("Guest {} invoked '{}' with payload of {}", id, op, ::std::str::from_utf8(payload).unwrap());
+fn host_callback(id: u64, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+     println!("Guest {} invoked '{}:{}' with payload of {}", id, ns, op, ::std::str::from_utf8(payload).unwrap());
      Ok(vec![])
 }
 

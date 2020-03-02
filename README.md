@@ -23,8 +23,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn host_callback(op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    println!("Guest invoked '{}' with payload of {} bytes", op, payload.len());
+fn host_callback(ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    println!("Guest invoked '{}:{}' with payload of {} bytes", ns, op, payload.len());
     Ok(vec![])
 }
 ```

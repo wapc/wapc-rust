@@ -195,14 +195,17 @@ impl Callable for HostCall {
         };
         let memory =
             get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
-        
-        let op_ptr = params[0].i32();
-        let op_len = params[1].i32();
-        let ptr = params[2].i32();
-        let len = params[3].i32();
-        
+
+        let ns_ptr = params[0].i32();
+        let ns_len = params[1].i32();
+        let op_ptr = params[2].i32();
+        let op_len = params[3].i32();
+        let ptr = params[4].i32();
+        let len = params[5].i32();
 
         let vec = get_vec_from_memory(memory.clone(), ptr.unwrap(), len.unwrap());
+        let ns_vec = get_vec_from_memory(memory.clone(), ns_ptr.unwrap(), ns_len.unwrap());
+        let ns = std::str::from_utf8(&ns_vec).unwrap();
         let op_vec = get_vec_from_memory(memory, op_ptr.unwrap(), op_len.unwrap());
         let op = std::str::from_utf8(&op_vec).unwrap();
         info!(
@@ -211,7 +214,7 @@ impl Callable for HostCall {
         );
         let result = {
             match self.state.borrow().host_callback {
-                Some(ref f) => f(id, op, &vec),
+                Some(ref f) => f(id, ns, op, &vec),
                 None => Err("missing host callback function".into()),
             }
         };
@@ -402,7 +405,7 @@ impl Callback<HostCall> for HostCall {
         store: Store,
     ) -> Func {
         let callback_type = FuncType::new(
-            Box::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32]),
+            Box::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32]),
             Box::new([ValType::I32]),
         );
         Func::new(

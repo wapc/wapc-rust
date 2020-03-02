@@ -8,7 +8,7 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
-wapc-guest = "0.1.1"
+wapc-guest = "0.2.0"
 
 [profile.release]
 # Optimize for small code size

@@ -1,7 +1,7 @@
 [package]
 name = "wapc"
-version = "0.2.2"
-authors = ["Kevin Hoffman <alothien@gmail.com>"]
+version = "0.3.0"
+authors = ["waPC team <alothien@gmail.com>"]
 edition = "2018"
 description = "Rust WebAssembly Host Runtime Conforming to the waPC Standard"
 license = "Apache-2.0"

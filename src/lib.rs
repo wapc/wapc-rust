@@ -37,8 +37,8 @@
 //!     Ok(())
 //! }
 //!
-//! fn host_callback(id: u64, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//!     println!("Guest {} invoked '{}' with payload of {} bytes", id, op, payload.len());
+//! fn host_callback(id: u64, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+//!     println!("Guest {} invoked '{}:{}' with payload of {} bytes", id, ns, op, payload.len());
 //!     Ok(vec![])
 //! }
 //! ```
@@ -110,7 +110,7 @@ const HOST_ERROR_LEN_FN: &str = "__host_error_len";
 // -- Functions called by host, exported by guest
 const GUEST_CALL: &str = "__guest_call";
 
-type HostCallback = dyn Fn(u64, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+type HostCallback = dyn Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
     + Sync
     + Send
     + 'static;
@@ -169,7 +169,7 @@ impl WapcHost {
     /// module instance will _not_ be allowed to utilize WASI host functions.
     pub fn new<F>(host_callback: F, buf: &[u8], wasi: Option<WasiParams>) -> Result<Self>
     where
-        F: Fn(u64, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+        F: Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
             + Sync
             + Send
             + 'static,

@@ -77,11 +77,11 @@ use crate::callbacks::ModuleState;
 use std::rc::Rc;
 use wasmtime::*;
 
-macro_rules! call {
+macro_rules!  call {
     ($func:expr, $($p:expr),*) => {
       match $func.borrow().call(&[$($p.into()),*]) {
         Ok(result) => {
-          let result: i32 = result[0].i32();
+          let result: i32 = result[0].i32().unwrap();
           result
         }
         Err(e) => {
@@ -215,7 +215,7 @@ impl WapcHost {
             state.guest_error = None;
         }
 
-        let callresult = call!(
+        let callresult: i32  = call!(
             self.guest_call_fn()?,
             inv.operation.len() as i32,
             inv.msg.len() as i32
@@ -275,13 +275,13 @@ impl WapcHost {
         instance_ref: Rc<RefCell<Option<Instance>>>,
         state: Rc<RefCell<ModuleState>>,
     ) -> Instance {
-        let engine = HostRef::new(Engine::default());
-        let store = HostRef::new(Store::new(&engine));
-        let module = HostRef::new(Module::new(&store, buf).unwrap());
+        let engine = Engine::default();
+        let store = Store::new(&engine);
+        let module = Module::new(&store, buf).unwrap();
 
-        let imports = arrange_imports(&module, state.clone(), instance_ref.clone(), &store);
+        let imports = arrange_imports(&module, state.clone(), instance_ref.clone(), store.clone());
 
-        wasmtime::Instance::new(&store, &module, imports.as_slice()).unwrap()
+        wasmtime::Instance::new( &module, imports.as_slice()).unwrap()
     }
 
     // TODO: make this cacheable
@@ -291,9 +291,9 @@ impl WapcHost {
             .borrow()
             .as_ref()
             .unwrap()
-            .find_export_by_name(GUEST_CALL)
+            .get_export(GUEST_CALL)
         {
-            Ok(ext.func().unwrap().clone())
+            Ok(HostRef::new(ext.func().unwrap().clone()))
         } else {
             Err(errors::new(errors::ErrorKind::GuestCallFailure(
                 "Guest module did not export __guest_call function!".to_string(),
@@ -308,23 +308,22 @@ impl WapcHost {
 /// corresponding callback. We **cannot** rely on a predictable import order
 /// in the wasm module
 fn arrange_imports(
-    module: &HostRef<Module>,
+    module: &Module,
     state: Rc<RefCell<ModuleState>>,
     instance: Rc<RefCell<Option<Instance>>>,
-    store: &HostRef<Store>,
+    store: Store,
 ) -> Vec<Extern> {
     module
-        .borrow()
         .imports()
         .iter()
         .filter_map(|imp| {
-            if let ExternType::ExternFunc(_) = imp.r#type() {
-                if imp.module().as_str() == HOST_NAMESPACE {
+            if let ExternType::Func(_) = imp.ty() {
+                if imp.module() == HOST_NAMESPACE {
                     Some(callback_for_import(
                         imp.name(),
                         state.clone(),
                         instance.clone(),
-                        store,
+                        store.clone(),
                     ))
                 } else {
                     None
@@ -337,38 +336,38 @@ fn arrange_imports(
 }
 
 fn callback_for_import(
-    import: &Name,
+    import:  &str,
     state: Rc<RefCell<ModuleState>>,
     instance_ref: Rc<RefCell<Option<Instance>>>,
-    store: &HostRef<Store>,
+    store: Store,
 ) -> Extern {
-    match import.as_str() {
+    match import {
         HOST_CONSOLE_LOG => {
             callbacks::ConsoleLog::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         HOST_CALL => {
-            callbacks::HostCall::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::HostCall::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         GUEST_REQUEST_FN => {
-            callbacks::GuestRequest::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::GuestRequest::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         HOST_RESPONSE_FN => {
-            callbacks::HostResponse::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::HostResponse::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         HOST_RESPONSE_LEN_FN => {
-            callbacks::HostResponseLen::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::HostResponseLen::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         GUEST_RESPONSE_FN => {
-            callbacks::GuestResponse::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::GuestResponse::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         GUEST_ERROR_FN => {
-            callbacks::GuestError::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::GuestError::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         HOST_ERROR_FN => {
-            callbacks::HostError::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::HostError::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         HOST_ERROR_LEN_FN => {
-            callbacks::HostErrorLen::as_func(state.clone(), instance_ref.clone(), &store).into()
+            callbacks::HostErrorLen::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         _ => unreachable!(),
     }

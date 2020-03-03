@@ -143,6 +143,14 @@ impl ConsoleLog {
     }
 }
 
+pub(crate) struct FdWrite {}
+
+impl FdWrite {
+    pub fn new(_state: Rc<RefCell<ModuleState>>, _instance: Rc<RefCell<Option<Instance>>>) -> Self {
+        FdWrite {}
+    }
+}
+
 impl Callable for GuestRequest {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[1].i32();
@@ -293,6 +301,13 @@ impl Callable for ConsoleLog {
     }
 }
 
+impl Callable for FdWrite {
+    fn call(&self, _params: &[Val], results: &mut [Val]) -> std::result::Result<(), Trap> {
+        results[0] = Val::I32(0);
+        Ok(())
+    }
+}
+
 impl Callback<GuestRequest> for GuestRequest {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
@@ -358,7 +373,7 @@ impl Callback<HostResponseLen> for HostResponseLen {
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
         store: Store,
-    ) ->Func {
+    ) -> Func {
         let callback_type = FuncType::new(Box::new([]), Box::new([ValType::I32]));
         Func::new(
             &store,
@@ -387,10 +402,10 @@ impl Callback<HostError> for HostError {
     fn as_func(
         state: Rc<RefCell<ModuleState>>,
         instance: Rc<RefCell<Option<Instance>>>,
-        store:Store,
+        store: Store,
     ) -> Func {
         let callback_type = FuncType::new(Box::new([ValType::I32]), Box::new([]));
-       Func::new(
+        Func::new(
             &store,
             callback_type,
             Rc::new(HostError::new(state, instance)),
@@ -405,7 +420,14 @@ impl Callback<HostCall> for HostCall {
         store: Store,
     ) -> Func {
         let callback_type = FuncType::new(
-            Box::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32, ValType::I32]),
+            Box::new([
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+            ]),
             Box::new([ValType::I32]),
         );
         Func::new(
@@ -429,7 +451,24 @@ impl Callback<ConsoleLog> for ConsoleLog {
             callback_type,
             Rc::new(ConsoleLog::new(state, instance)),
         )
-        
+    }
+}
+
+impl Callback<FdWrite> for FdWrite {
+    fn as_func(
+        state: Rc<RefCell<ModuleState>>,
+        instance: Rc<RefCell<Option<Instance>>>,
+        store: Store,
+    ) -> Func {
+        let callback_type = FuncType::new(
+            Box::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32]),
+            Box::new([ValType::I32]),
+        );
+        Func::new(
+            &store,
+            callback_type,
+            Rc::new(FdWrite::new(state, instance)),
+        )
     }
 }
 
@@ -437,15 +476,17 @@ fn get_export_memory(exports: &[Extern], i: usize) -> Result<HostRef<Memory>, an
     if exports.len() <= i {
         bail!("> Error accessing memory export {}!", i);
     }
-    Ok(HostRef::new(exports[i]
-        .memory()
-        .with_context(|| format!("> Error accessing memory export {}!", i))?
-        .clone()))
+    Ok(HostRef::new(
+        exports[i]
+            .memory()
+            .with_context(|| format!("> Error accessing memory export {}!", i))?
+            .clone(),
+    ))
 }
 
 fn get_vec_from_memory(mem: HostRef<Memory>, ptr: i32, len: i32) -> Vec<u8> {
     let mem = mem.borrow_mut();
-    let data = unsafe { mem.data_unchecked_mut()};
+    let data = unsafe { mem.data_unchecked_mut() };
     data[ptr as usize..(ptr + len) as usize]
         .iter()
         .copied()

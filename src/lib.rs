@@ -110,6 +110,12 @@ const HOST_ERROR_LEN_FN: &str = "__host_error_len";
 // -- Functions called by host, exported by guest
 const GUEST_CALL: &str = "__guest_call";
 
+// namespace needed for some language support
+const WASI_UNSTABLE_NAMESPACE: &str = "wasi_unstable";
+
+// -- Functions called by guest, exported by wasi or wasi_unstable
+const WASI_FD_WRITE: &str = "fd_write";
+
 type HostCallback = dyn Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
     + Sync
     + Send
@@ -188,6 +194,9 @@ impl WapcHost {
             instance: instance_ref,
             wasidata: wasi,
         };
+
+        mh.initialize()?;
+
         Ok(mh)
     }
 
@@ -215,7 +224,7 @@ impl WapcHost {
             state.guest_error = None;
         }
 
-        let callresult: i32  = call!(
+        let callresult: i32 = call!(
             self.guest_call_fn()?,
             inv.operation.len() as i32,
             inv.msg.len() as i32
@@ -266,7 +275,8 @@ impl WapcHost {
         let new_instance =
             WapcHost::instance_from_buffer(module, &self.wasidata, self.instance.clone(), state);
         self.instance.borrow_mut().replace(new_instance);
-        Ok(())
+
+        self.initialize()
     }
 
     fn instance_from_buffer(
@@ -281,7 +291,7 @@ impl WapcHost {
 
         let imports = arrange_imports(&module, state.clone(), instance_ref.clone(), store.clone());
 
-        wasmtime::Instance::new( &module, imports.as_slice()).unwrap()
+        wasmtime::Instance::new(&module, imports.as_slice()).unwrap()
     }
 
     // TODO: make this cacheable
@@ -298,6 +308,24 @@ impl WapcHost {
             Err(errors::new(errors::ErrorKind::GuestCallFailure(
                 "Guest module did not export __guest_call function!".to_string(),
             )))
+        }
+    }
+
+    fn initialize(&self) -> Result<()> {
+        if let Some(ext) = self
+            .instance
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .get_export("_start")
+        {
+            ext.func().unwrap().call(&[]).map(|_| ()).map_err(|_err| {
+                errors::new(errors::ErrorKind::GuestCallFailure(
+                    "Error invoking _start function!".to_string(),
+                ))
+            })
+        } else {
+            Ok(())
         }
     }
 }
@@ -325,6 +353,13 @@ fn arrange_imports(
                         instance.clone(),
                         store.clone(),
                     ))
+                } else if imp.module() == WASI_UNSTABLE_NAMESPACE {
+                    Some(callback_for_wasi_unstable(
+                        imp.name(),
+                        state.clone(),
+                        instance.clone(),
+                        store.clone(),
+                    ))
                 } else {
                     None
                 }
@@ -336,7 +371,7 @@ fn arrange_imports(
 }
 
 fn callback_for_import(
-    import:  &str,
+    import: &str,
     state: Rc<RefCell<ModuleState>>,
     instance_ref: Rc<RefCell<Option<Instance>>>,
     store: Store,
@@ -368,6 +403,20 @@ fn callback_for_import(
         }
         HOST_ERROR_LEN_FN => {
             callbacks::HostErrorLen::as_func(state.clone(), instance_ref.clone(), store).into()
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn callback_for_wasi_unstable(
+    import: &str,
+    state: Rc<RefCell<ModuleState>>,
+    instance_ref: Rc<RefCell<Option<Instance>>>,
+    store: Store,
+) -> Extern {
+    match import {
+        WASI_FD_WRITE => {
+            callbacks::FdWrite::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         _ => unreachable!(),
     }

@@ -11,19 +11,29 @@ fn load_file() -> Vec<u8> {
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-     env_logger::init();
-     let module_bytes = load_file();
-     let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
+    env_logger::init();
+    let module_bytes = load_file();
+    let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
 
-     println!("Calling guest (wasm) function written in Zig");
-     let res = host.call("hello", b"this is a test")?;
-     println!("Result - {}", ::std::str::from_utf8(&res).unwrap());
+    println!("Calling guest (wasm) function written in Zig");
+    let res = host.call("hello", b"this is a test")?;
+    println!("Result - {}", ::std::str::from_utf8(&res).unwrap());
 
-     Ok(())
+    Ok(())
 }
 
-fn host_callback(id: u64, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-     println!("Guest {} invoked '{}:{}' with payload of {}", id, ns, op, ::std::str::from_utf8(payload).unwrap());
-     Ok(vec![])
+fn host_callback(
+    id: u64,
+    ns: &str,
+    op: &str,
+    payload: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    println!(
+        "Guest {} invoked '{}:{}' with payload of {}",
+        id,
+        ns,
+        op,
+        ::std::str::from_utf8(payload).unwrap()
+    );
+    Ok(vec![])
 }
-

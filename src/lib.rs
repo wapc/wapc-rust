@@ -61,11 +61,12 @@ extern crate log;
 mod callbacks;
 pub mod errors;
 pub mod prelude;
+mod modreg;
 
 /// A result type for errors that occur within the wapc library
 pub type Result<T> = std::result::Result<T, errors::Error>;
 
-use std::fs::File;
+use crate::modreg::ModuleRegistry;
 use std::sync::atomic::{AtomicU64, Ordering};
 use wasmtime::Func;
 use wasmtime::Instance;
@@ -112,9 +113,7 @@ const GUEST_CALL: &str = "__guest_call";
 
 // namespace needed for some language support
 const WASI_UNSTABLE_NAMESPACE: &str = "wasi_unstable";
-
-// -- Functions called by guest, exported by wasi or wasi_unstable
-const WASI_FD_WRITE: &str = "fd_write";
+const WASI_SNAPSHOT_PREVIEW1_NAMESPACE: &str = "wasi_snapshot_preview1";
 
 type HostCallback = dyn Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
     + Sync
@@ -137,23 +136,26 @@ impl Invocation {
 }
 
 /// Stores the parameters required to create a WASI instance
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WasiParams {
     argv: Vec<String>,
-    environment: Vec<(String, String)>,
-    preopened_dirs: Vec<(String, File)>,
+    map_dirs: Vec<(String, String)>,
+    env_vars: Vec<(String, String)>,
+    preopened_dirs: Vec<String>,    
 }
 
 impl WasiParams {
     pub fn new(
         argv: Vec<String>,
-        environment: Vec<(String, String)>,
-        preopened_dirs: Vec<(String, File)>,
+        map_dirs: Vec<(String, String)>,
+        env_vars: Vec<(String, String)>,
+        preopened_dirs: Vec<String>,
     ) -> Self {
         WasiParams {
             argv,
-            environment,
+            map_dirs,
             preopened_dirs,
+            env_vars,
         }
     }
 }
@@ -184,7 +186,7 @@ impl WapcHost {
         let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
         let instance_ref = Rc::new(RefCell::new(None));
         let instance =
-            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone());
+            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
         instance_ref.replace(Some(instance));
         if wasi.is_some() {
             error!("NOTE - WASI support is not yet enabled, but will be soon.");
@@ -273,7 +275,7 @@ impl WapcHost {
         );
         let state = self.state.clone();
         let new_instance =
-            WapcHost::instance_from_buffer(module, &self.wasidata, self.instance.clone(), state);
+            WapcHost::instance_from_buffer(module, &self.wasidata, self.instance.clone(), state)?;
         self.instance.borrow_mut().replace(new_instance);
 
         self.initialize()
@@ -281,17 +283,34 @@ impl WapcHost {
 
     fn instance_from_buffer(
         buf: &[u8],
-        _wasi: &Option<WasiParams>,
+        wasi: &Option<WasiParams>,
         instance_ref: Rc<RefCell<Option<Instance>>>,
         state: Rc<RefCell<ModuleState>>,
-    ) -> Instance {
+    ) -> Result<Instance> {
         let engine = Engine::default();
         let store = Store::new(&engine);
         let module = Module::new(&store, buf).unwrap();
 
-        let imports = arrange_imports(&module, state.clone(), instance_ref.clone(), store.clone());
+        let d = WasiParams::default();
+        let wasi = match wasi {
+            Some(w) => w,
+            None => &d
+        };
+        
+        // Make wasi available by default.
+        let preopen_dirs = modreg::compute_preopen_dirs(&wasi.preopened_dirs, 
+           &wasi.map_dirs).unwrap();
+        let argv = vec![]; // not supporting argv at the moment
 
-        wasmtime::Instance::new(&module, imports.as_slice()).unwrap()
+        let module_registry = ModuleRegistry::new(&store, &preopen_dirs, &argv, &wasi.env_vars).unwrap();
+
+        let imports = arrange_imports(&module, 
+            state.clone(), 
+            instance_ref.clone(), 
+            store.clone(),
+            &module_registry);
+
+        Ok(wasmtime::Instance::new(&module, imports?.as_slice()).unwrap())
     }
 
     // TODO: make this cacheable
@@ -340,34 +359,39 @@ fn arrange_imports(
     state: Rc<RefCell<ModuleState>>,
     instance: Rc<RefCell<Option<Instance>>>,
     store: Store,
-) -> Vec<Extern> {
-    module
+    mod_registry: &ModuleRegistry,
+) -> Result<Vec<Extern>> {
+    Ok(module
         .imports()
         .iter()
         .filter_map(|imp| {
             if let ExternType::Func(_) = imp.ty() {
-                if imp.module() == HOST_NAMESPACE {
-                    Some(callback_for_import(
-                        imp.name(),
-                        state.clone(),
-                        instance.clone(),
-                        store.clone(),
-                    ))
-                } else if imp.module() == WASI_UNSTABLE_NAMESPACE {
-                    Some(callback_for_wasi_unstable(
-                        imp.name(),
-                        state.clone(),
-                        instance.clone(),
-                        store.clone(),
-                    ))
-                } else {
-                    None
+                match imp.module() {
+                    HOST_NAMESPACE => {
+                        Some(callback_for_import(
+                            imp.name(),
+                            state.clone(),
+                            instance.clone(),
+                            store.clone(),
+                        ))
+                    },
+                    // TODO: to forcibly block the use of WASI, these should error 
+                    // rather than looking up WASI modules.
+                    WASI_UNSTABLE_NAMESPACE => {
+                        let f = Extern::from(mod_registry.wasi_unstable.get_export(imp.name()).unwrap().clone());
+                        Some(f)
+                    },
+                    WASI_SNAPSHOT_PREVIEW1_NAMESPACE => {
+                        let f: Extern = Extern::from(mod_registry.wasi_snapshot_preview1.get_export(imp.name()).unwrap().clone());
+                        Some(f)
+                    },
+                    other => panic!("import module `{}` was not found", other) //TODO: get rid of panic
                 }
             } else {
                 None
-            }
+            }                        
         })
-        .collect()
+        .collect())
 }
 
 fn callback_for_import(
@@ -403,20 +427,6 @@ fn callback_for_import(
         }
         HOST_ERROR_LEN_FN => {
             callbacks::HostErrorLen::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        _ => unreachable!(),
-    }
-}
-
-fn callback_for_wasi_unstable(
-    import: &str,
-    state: Rc<RefCell<ModuleState>>,
-    instance_ref: Rc<RefCell<Option<Instance>>>,
-    store: Store,
-) -> Extern {
-    match import {
-        WASI_FD_WRITE => {
-            callbacks::FdWrite::as_func(state.clone(), instance_ref.clone(), store).into()
         }
         _ => unreachable!(),
     }

@@ -1,6 +1,6 @@
 use crate::HostCallback;
 use crate::Invocation;
-use anyhow::{bail, Context as _};
+use anyhow::{Context as _};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasmtime::Instance;
@@ -158,7 +158,7 @@ impl Callable for GuestRequest {
 
         let invocation = &self.state.borrow().guest_request;
         let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         if let Some(inv) = invocation {
             write_bytes_to_memory(memory.clone(), ptr.unwrap(), &inv.msg);
             write_bytes_to_memory(memory, op_ptr.unwrap(), &inv.operation.as_bytes());
@@ -172,7 +172,7 @@ impl Callable for GuestResponse {
         let ptr = params[0].i32();
         let len = params[1].i32();
         let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
         self.state.borrow_mut().guest_response = Some(vec);
         Ok(())
@@ -182,7 +182,7 @@ impl Callable for GuestResponse {
 impl Callable for GuestError {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let ptr = params[0].i32();
         let len = params[1].i32();
 
@@ -202,7 +202,7 @@ impl Callable for HostCall {
             state.id
         };
         let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
 
         let ns_ptr = params[0].i32();
         let ns_len = params[1].i32();
@@ -255,7 +255,7 @@ impl Callable for HostResponse {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         if let Some(ref e) = self.state.borrow().host_response {
             let memory =
-                get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+                get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
             let ptr = params[0].i32();
             write_bytes_to_memory(memory, ptr.unwrap(), &e);
         }
@@ -277,7 +277,7 @@ impl Callable for HostError {
         if let Some(ref e) = self.state.borrow().host_error {
             let ptr = params[0].i32();
             let memory =
-                get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+                get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
             write_bytes_to_memory(memory, ptr.unwrap(), e.as_bytes());
         }
         Ok(())
@@ -289,7 +289,7 @@ impl Callable for ConsoleLog {
         let ptr = params[0].i32();
         let len = params[1].i32();
         let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports(), 0).unwrap();
+            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
 
         info!(
@@ -472,14 +472,12 @@ impl Callback<FdWrite> for FdWrite {
     }
 }
 
-fn get_export_memory(exports: &[Extern], i: usize) -> Result<HostRef<Memory>, anyhow::Error> {
-    if exports.len() <= i {
-        bail!("> Error accessing memory export {}!", i);
-    }
+fn get_export_memory(exports: &[Extern]) -> Result<HostRef<Memory>, anyhow::Error> {
+    let memory = exports.iter().find_map(|e| e.memory());
+
     Ok(HostRef::new(
-        exports[i]
-            .memory()
-            .with_context(|| format!("> Error accessing memory export {}!", i))?
+        memory
+            .with_context(|| "> Error accessing memory export!")?
             .clone(),
     ))
 }

@@ -1,6 +1,6 @@
 use crate::HostCallback;
 use crate::Invocation;
-use anyhow::{Context as _};
+use anyhow::Context as _;
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasmtime::Instance;
@@ -157,8 +157,7 @@ impl Callable for GuestRequest {
         let op_ptr = params[0].i32();
 
         let invocation = &self.state.borrow().guest_request;
-        let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
+        let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         if let Some(inv) = invocation {
             write_bytes_to_memory(memory.clone(), ptr.unwrap(), &inv.msg);
             write_bytes_to_memory(memory, op_ptr.unwrap(), &inv.operation.as_bytes());
@@ -171,8 +170,7 @@ impl Callable for GuestResponse {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[0].i32();
         let len = params[1].i32();
-        let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
+        let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
         self.state.borrow_mut().guest_response = Some(vec);
         Ok(())
@@ -181,8 +179,7 @@ impl Callable for GuestResponse {
 
 impl Callable for GuestError {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
-        let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
+        let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let ptr = params[0].i32();
         let len = params[1].i32();
 
@@ -201,8 +198,7 @@ impl Callable for HostCall {
             state.host_error = None;
             state.id
         };
-        let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
+        let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
 
         let ns_ptr = params[0].i32();
         let ns_len = params[1].i32();
@@ -288,8 +284,7 @@ impl Callable for ConsoleLog {
     fn call(&self, params: &[Val], _results: &mut [Val]) -> std::result::Result<(), Trap> {
         let ptr = params[0].i32();
         let len = params[1].i32();
-        let memory =
-            get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
+        let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
 
         info!(

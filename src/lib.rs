@@ -60,8 +60,8 @@ extern crate log;
 
 mod callbacks;
 pub mod errors;
-pub mod prelude;
 mod modreg;
+pub mod prelude;
 
 /// A result type for errors that occur within the wapc library
 pub type Result<T> = std::result::Result<T, errors::Error>;
@@ -141,7 +141,7 @@ pub struct WasiParams {
     argv: Vec<String>,
     map_dirs: Vec<(String, String)>,
     env_vars: Vec<(String, String)>,
-    preopened_dirs: Vec<String>,    
+    preopened_dirs: Vec<String>,
 }
 
 impl WasiParams {
@@ -188,9 +188,6 @@ impl WapcHost {
         let instance =
             WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
         instance_ref.replace(Some(instance));
-        if wasi.is_some() {
-            error!("NOTE - WASI support is not yet enabled, but will be soon.");
-        }
         let mh = WapcHost {
             state,
             instance: instance_ref,
@@ -294,21 +291,24 @@ impl WapcHost {
         let d = WasiParams::default();
         let wasi = match wasi {
             Some(w) => w,
-            None => &d
+            None => &d,
         };
-        
+
         // Make wasi available by default.
-        let preopen_dirs = modreg::compute_preopen_dirs(&wasi.preopened_dirs, 
-           &wasi.map_dirs).unwrap();
-        let argv = vec![]; // not supporting argv at the moment
+        let preopen_dirs =
+            modreg::compute_preopen_dirs(&wasi.preopened_dirs, &wasi.map_dirs).unwrap();
+        let argv = vec![]; // TODO: add support for argv (if applicable)
 
-        let module_registry = ModuleRegistry::new(&store, &preopen_dirs, &argv, &wasi.env_vars).unwrap();
+        let module_registry =
+            ModuleRegistry::new(&store, &preopen_dirs, &argv, &wasi.env_vars).unwrap();
 
-        let imports = arrange_imports(&module, 
-            state.clone(), 
-            instance_ref.clone(), 
+        let imports = arrange_imports(
+            &module,
+            state.clone(),
+            instance_ref.clone(),
             store.clone(),
-            &module_registry);
+            &module_registry,
+        );
 
         Ok(wasmtime::Instance::new(&module, imports?.as_slice()).unwrap())
     }
@@ -367,29 +367,39 @@ fn arrange_imports(
         .filter_map(|imp| {
             if let ExternType::Func(_) = imp.ty() {
                 match imp.module() {
-                    HOST_NAMESPACE => {
-                        Some(callback_for_import(
-                            imp.name(),
-                            state.clone(),
-                            instance.clone(),
-                            store.clone(),
-                        ))
-                    },
-                    // TODO: to forcibly block the use of WASI, these should error 
+                    HOST_NAMESPACE => Some(callback_for_import(
+                        imp.name(),
+                        state.clone(),
+                        instance.clone(),
+                        store.clone(),
+                    )),
+                    // TODO: to forcibly block the use of WASI, these should error
                     // rather than looking up WASI modules.
                     WASI_UNSTABLE_NAMESPACE => {
-                        let f = Extern::from(mod_registry.wasi_unstable.get_export(imp.name()).unwrap().clone());
+                        let f = Extern::from(
+                            mod_registry
+                                .wasi_unstable
+                                .get_export(imp.name())
+                                .unwrap()
+                                .clone(),
+                        );
                         Some(f)
-                    },
+                    }
                     WASI_SNAPSHOT_PREVIEW1_NAMESPACE => {
-                        let f: Extern = Extern::from(mod_registry.wasi_snapshot_preview1.get_export(imp.name()).unwrap().clone());
+                        let f: Extern = Extern::from(
+                            mod_registry
+                                .wasi_snapshot_preview1
+                                .get_export(imp.name())
+                                .unwrap()
+                                .clone(),
+                        );
                         Some(f)
-                    },
-                    other => panic!("import module `{}` was not found", other) //TODO: get rid of panic
+                    }
+                    other => panic!("import module `{}` was not found", other), //TODO: get rid of panic
                 }
             } else {
                 None
-            }                        
+            }
         })
         .collect())
 }

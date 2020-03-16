@@ -120,6 +120,12 @@ type HostCallback = dyn Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8
     + Send
     + 'static;
 
+type LogCallback = dyn Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
+    +  Sync
+    + Send
+    + 'static;
+  
+
 #[derive(Debug, Clone)]
 struct Invocation {
     operation: String,
@@ -183,7 +189,8 @@ impl WapcHost {
             + 'static,
     {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
-        let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
+        let state = Rc::new(RefCell::new(
+            ModuleState::new(id, Box::new(host_callback))));
         let instance_ref = Rc::new(RefCell::new(None));
         let instance =
             WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
@@ -198,6 +205,36 @@ impl WapcHost {
 
         Ok(mh)
     }
+
+    pub fn new_with_logger<F, G>(host_callback: F, buf: &[u8], logger: G, wasi: Option<WasiParams>) -> Result<Self>
+    where
+        F: Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+            + Sync
+            + Send
+            + 'static,
+        G: Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
+            + Sync
+            + Send
+            + 'static
+    {
+        let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
+        let state = Rc::new(RefCell::new(
+            ModuleState::new_with_logger(id, Box::new(host_callback), Box::new(logger))));
+        let instance_ref = Rc::new(RefCell::new(None));
+        let instance =
+            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
+        instance_ref.replace(Some(instance));
+        let mh = WapcHost {
+            state,
+            instance: instance_ref,
+            wasidata: wasi,
+        };
+
+        mh.initialize()?;
+
+        Ok(mh)
+    }
+    
 
     /// Returns a reference to the unique identifier of this module. If a parent process
     /// has instantiated multiple `WapcHost`s, then the single static host call function

@@ -1,4 +1,4 @@
-use crate::HostCallback;
+use crate::{HostCallback, LogCallback};
 use crate::Invocation;
 use anyhow::Context as _;
 use std::cell::RefCell;
@@ -15,6 +15,7 @@ pub(crate) struct ModuleState {
     pub guest_error: Option<String>,
     pub host_error: Option<String>,
     pub host_callback: Option<Box<HostCallback>>,
+    pub log_callback: Option<Box<LogCallback>>,
     pub id: u64,
 }
 
@@ -23,6 +24,16 @@ impl ModuleState {
         ModuleState {
             id,
             host_callback: Some(host_callback),
+            log_callback: None,
+            ..ModuleState::default()
+        }
+    }
+
+    pub fn new_with_logger(id: u64, host_callback: Box<HostCallback>, log_callback: Box<LogCallback>) -> Self {
+        ModuleState {
+            id,
+            host_callback: Some(host_callback),
+            log_callback: Some(log_callback),
             ..ModuleState::default()
         }
     }
@@ -212,10 +223,9 @@ impl Callable for HostCall {
         let ns = std::str::from_utf8(&ns_vec).unwrap();
         let op_vec = get_vec_from_memory(memory, op_ptr.unwrap(), op_len.unwrap());
         let op = std::str::from_utf8(&op_vec).unwrap();
-        info!(
-            "Guest module {} invoking host call for operation {}",
-            id, op
-        );
+        trace!(
+            "Guest {} invoking host operation {}", id, op
+        );        
         let result = {
             match self.state.borrow().host_callback {
                 Some(ref f) => f(id, ns, op, &vec),
@@ -287,12 +297,22 @@ impl Callable for ConsoleLog {
         let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
         let vec = get_vec_from_memory(memory, ptr.unwrap(), len.unwrap());
 
-        info!(
-            "[{}] Wasm Guest: {}",
-            self.state.borrow().id,
-            std::str::from_utf8(&vec).unwrap()
-        );
-        Ok(())
+        let id = self.state.borrow().id;
+        let msg = std::str::from_utf8(&vec).unwrap();
+
+        match self.state.borrow().log_callback {
+            Some(ref f) => {
+                f(id, msg).unwrap();                
+            },
+            None => {
+                info!(
+                    "[Guest {}]: {}",
+                    id,
+                    msg
+                );                  
+            },
+        }           
+        Ok(())     
     }
 }
 

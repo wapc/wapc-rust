@@ -1,5 +1,5 @@
-use crate::{HostCallback, LogCallback};
 use crate::Invocation;
+use crate::{HostCallback, LogCallback};
 use anyhow::Context as _;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,7 +29,11 @@ impl ModuleState {
         }
     }
 
-    pub fn new_with_logger(id: u64, host_callback: Box<HostCallback>, log_callback: Box<LogCallback>) -> Self {
+    pub fn new_with_logger(
+        id: u64,
+        host_callback: Box<HostCallback>,
+        log_callback: Box<LogCallback>,
+    ) -> Self {
         ModuleState {
             id,
             host_callback: Some(host_callback),
@@ -211,24 +215,26 @@ impl Callable for HostCall {
         };
         let memory = get_export_memory(self.instance.borrow().as_ref().unwrap().exports()).unwrap();
 
-        let ns_ptr = params[0].i32();
-        let ns_len = params[1].i32();
-        let op_ptr = params[2].i32();
-        let op_len = params[3].i32();
-        let ptr = params[4].i32();
-        let len = params[5].i32();
+        let bd_ptr = params[0].i32();
+        let bd_len = params[1].i32();
+        let ns_ptr = params[2].i32();
+        let ns_len = params[3].i32();
+        let op_ptr = params[4].i32();
+        let op_len = params[5].i32();
+        let ptr = params[6].i32();
+        let len = params[7].i32();
 
         let vec = get_vec_from_memory(memory.clone(), ptr.unwrap(), len.unwrap());
+        let bd_vec = get_vec_from_memory(memory.clone(), bd_ptr.unwrap(), bd_len.unwrap());
+        let bd = std::str::from_utf8(&bd_vec).unwrap();
         let ns_vec = get_vec_from_memory(memory.clone(), ns_ptr.unwrap(), ns_len.unwrap());
         let ns = std::str::from_utf8(&ns_vec).unwrap();
         let op_vec = get_vec_from_memory(memory, op_ptr.unwrap(), op_len.unwrap());
         let op = std::str::from_utf8(&op_vec).unwrap();
-        trace!(
-            "Guest {} invoking host operation {}", id, op
-        );        
+        trace!("Guest {} invoking host operation {}", id, op);
         let result = {
             match self.state.borrow().host_callback {
-                Some(ref f) => f(id, ns, op, &vec),
+                Some(ref f) => f(id, bd, ns, op, &vec),
                 None => Err("missing host callback function".into()),
             }
         };
@@ -302,17 +308,13 @@ impl Callable for ConsoleLog {
 
         match self.state.borrow().log_callback {
             Some(ref f) => {
-                f(id, msg).unwrap();                
-            },
+                f(id, msg).unwrap();
+            }
             None => {
-                info!(
-                    "[Guest {}]: {}",
-                    id,
-                    msg
-                );                  
-            },
-        }           
-        Ok(())     
+                info!("[Guest {}]: {}", id, msg);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -436,6 +438,8 @@ impl Callback<HostCall> for HostCall {
     ) -> Func {
         let callback_type = FuncType::new(
             Box::new([
+                ValType::I32,
+                ValType::I32,
                 ValType::I32,
                 ValType::I32,
                 ValType::I32,

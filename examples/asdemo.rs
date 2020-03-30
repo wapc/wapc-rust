@@ -24,13 +24,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn host_callback(
     id: u64,
+    bd: &str,
     ns: &str,
     op: &str,
     payload: &[u8],
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     println!(
-        "Guest {} invoked '{}:{}' with payload of {}",
+        "Guest {} invoked '{}->{}:{}' with payload of {}",
         id,
+        bd,
         ns,
         op,
         ::std::str::from_utf8(payload).unwrap()

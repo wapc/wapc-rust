@@ -37,8 +37,8 @@
 //!     Ok(())
 //! }
 //!
-//! fn host_callback(id: u64, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//!     println!("Guest {} invoked '{}:{}' with payload of {} bytes", id, ns, op, payload.len());
+//! fn host_callback(id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+//!     println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
 //!     Ok(vec![])
 //! }
 //! ```
@@ -115,16 +115,15 @@ const GUEST_CALL: &str = "__guest_call";
 const WASI_UNSTABLE_NAMESPACE: &str = "wasi_unstable";
 const WASI_SNAPSHOT_PREVIEW1_NAMESPACE: &str = "wasi_snapshot_preview1";
 
-type HostCallback = dyn Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+type HostCallback = dyn Fn(u64, &str, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
     + Sync
     + Send
     + 'static;
 
 type LogCallback = dyn Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
-    +  Sync
+    + Sync
     + Send
     + 'static;
-  
 
 #[derive(Debug, Clone)]
 struct Invocation {
@@ -183,14 +182,19 @@ impl WapcHost {
     /// module instance will _not_ be allowed to utilize WASI host functions.
     pub fn new<F>(host_callback: F, buf: &[u8], wasi: Option<WasiParams>) -> Result<Self>
     where
-        F: Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+        F: Fn(
+                u64,
+                &str,
+                &str,
+                &str,
+                &[u8],
+            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
             + Sync
             + Send
             + 'static,
     {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
-        let state = Rc::new(RefCell::new(
-            ModuleState::new(id, Box::new(host_callback))));
+        let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
         let instance_ref = Rc::new(RefCell::new(None));
         let instance =
             WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
@@ -206,20 +210,34 @@ impl WapcHost {
         Ok(mh)
     }
 
-    pub fn new_with_logger<F, G>(host_callback: F, buf: &[u8], logger: G, wasi: Option<WasiParams>) -> Result<Self>
+    pub fn new_with_logger<F, G>(
+        host_callback: F,
+        buf: &[u8],
+        logger: G,
+        wasi: Option<WasiParams>,
+    ) -> Result<Self>
     where
-        F: Fn(u64, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+        F: Fn(
+                u64,
+                &str,
+                &str,
+                &str,
+                &[u8],
+            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
             + Sync
             + Send
             + 'static,
         G: Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
             + Sync
             + Send
-            + 'static
+            + 'static,
     {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
-        let state = Rc::new(RefCell::new(
-            ModuleState::new_with_logger(id, Box::new(host_callback), Box::new(logger))));
+        let state = Rc::new(RefCell::new(ModuleState::new_with_logger(
+            id,
+            Box::new(host_callback),
+            Box::new(logger),
+        )));
         let instance_ref = Rc::new(RefCell::new(None));
         let instance =
             WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
@@ -234,7 +252,6 @@ impl WapcHost {
 
         Ok(mh)
     }
-    
 
     /// Returns a reference to the unique identifier of this module. If a parent process
     /// has instantiated multiple `WapcHost`s, then the single static host call function

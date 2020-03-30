@@ -26,7 +26,10 @@ pub fn handle_wapc(operation: &str, msg: &[u8]) -> CallResult {
 }
 
 fn hello_world(msg: &[u8]) -> CallResult {
-    guest::console_log(&format!("Received message: {}", std::str::from_utf8(msg).unwrap()));
-    let _res = host_call("wapc:sample", "Ping", b"PING")?;
+    guest::console_log(&format!(
+        "Received message: {}",
+        std::str::from_utf8(msg).unwrap()
+    ));
+    let _res = host_call("myBinding", "wapc:sample", "Ping", b"PING")?;
     Ok(b"hello world!".to_vec())
 }

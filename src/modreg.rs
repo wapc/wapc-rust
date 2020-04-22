@@ -33,10 +33,9 @@ impl ModuleRegistry {
 
         let cx1 = cx1.build().unwrap(); // TODO: get rid of unwrap
 
-        let mut cx2 = wasi_common::old::snapshot_0::WasiCtxBuilder::new()
-            .inherit_stdio()
-            .args(argv)
-            .envs(vars);
+        let mut builder = wasi_common::old::snapshot_0::WasiCtxBuilder::new();
+
+        let mut cx2 = builder.inherit_stdio().args(argv).envs(vars);
 
         for (name, file) in preopen_dirs {
             cx2 = cx2.preopened_dir(file.try_clone()?, name);

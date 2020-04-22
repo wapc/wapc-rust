@@ -27,23 +27,16 @@
 //! #    include_bytes!("../.assets/hello_wasi.wasm").to_vec()
 //! # }
 //! pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # env_logger::init();
 //!     let module_bytes = load_file();
-//!     let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
-//     let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
-//         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
-//         Ok(vec![])
-//     }, &module_bytes, None)?;
+//!     let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
+//!         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
+//!         Ok(vec![])
+//!     }, &module_bytes, None)?;
 //!
 //!     let res = host.call("wapc:sample!Hello", b"this is a test")?;
 //!     assert_eq!(res, b"hello world!");
 //!
 //!     Ok(())
-//! }
-//!
-//! fn host_callback(id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//!     println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
-//!     Ok(vec![])
 //! }
 //! ```
 //!

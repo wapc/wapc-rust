@@ -16,16 +16,14 @@ use wapc::prelude::*;
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let module = load_file();
-    let mut host = WapcHost::new(host_callback, &module, None)?;
+    let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &str|{
+        println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
+        Ok(vec![])
+    }, &module, None)?;
 
     let res = host.call("wapc:sample!Hello", b"this is a test")?;
     assert_eq!(res, b"hello world!");
     Ok(())
-}
-
-fn host_callback(ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    println!("Guest invoked '{}:{}' with payload of {} bytes", ns, op, payload.len());
-    Ok(vec![])
 }
 ```
 

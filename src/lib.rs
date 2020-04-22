@@ -27,19 +27,16 @@
 //! #    include_bytes!("../.assets/hello_wasi.wasm").to_vec()
 //! # }
 //! pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # env_logger::init();
 //!     let module_bytes = load_file();
-//!     let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
+//!     let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
+//!         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
+//!         Ok(vec![])
+//!     }, &module_bytes, None)?;
 //!
 //!     let res = host.call("wapc:sample!Hello", b"this is a test")?;
 //!     assert_eq!(res, b"hello world!");
 //!
 //!     Ok(())
-//! }
-//!
-//! fn host_callback(id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//!     println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
-//!     Ok(vec![])
 //! }
 //! ```
 //!
@@ -73,7 +70,6 @@ use wasmtime::Instance;
 
 use std::cell::RefCell;
 
-use crate::callbacks::Callback;
 use crate::callbacks::ModuleState;
 use std::rc::Rc;
 use wasmtime::*;
@@ -175,34 +171,36 @@ pub struct WapcHost {
     state: Rc<RefCell<ModuleState>>,
     instance: Rc<RefCell<Option<Instance>>>,
     wasidata: Option<WasiParams>,
+    guest_call_fn: HostRef<Func>,
 }
 
 impl WapcHost {
-    /// Creates a new instance of a waPC-compliant WebAssembly host runtime. The resulting WebAssembly
-    /// module instance will _not_ be allowed to utilize WASI host functions.
-    pub fn new<F>(host_callback: F, buf: &[u8], wasi: Option<WasiParams>) -> Result<Self>
-    where
-        F: Fn(
+    /// Creates a new instance of a waPC-compliant WebAssembly host runtime.
+    pub fn new(
+        host_callback: impl Fn(
                 u64,
                 &str,
                 &str,
                 &str,
                 &[u8],
             ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+            + 'static
             + Sync
-            + Send
-            + 'static,
-    {
+            + Send,
+        buf: &[u8],
+        wasi: Option<WasiParams>,
+    ) -> Result<Self> {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
         let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
         let instance_ref = Rc::new(RefCell::new(None));
-        let instance =
-            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
+        let instance = WapcHost::instance_from_buffer(buf, &wasi, state.clone())?;
         instance_ref.replace(Some(instance));
+        let gc = guest_call_fn(instance_ref.clone())?;
         let mh = WapcHost {
             state,
             instance: instance_ref,
             wasidata: wasi,
+            guest_call_fn: gc,
         };
 
         mh.initialize()?;
@@ -210,28 +208,26 @@ impl WapcHost {
         Ok(mh)
     }
 
-    pub fn new_with_logger<F, G>(
-        host_callback: F,
-        buf: &[u8],
-        logger: G,
-        wasi: Option<WasiParams>,
-    ) -> Result<Self>
-    where
-        F: Fn(
+    /// Creates a new instance of a waPC-compliant WebAssembly host runtime with a callback handler
+    /// for logging
+    pub fn new_with_logger(
+        host_callback: impl Fn(
                 u64,
                 &str,
                 &str,
                 &str,
                 &[u8],
             ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+            + 'static
+            + Sync
+            + Send,
+        buf: &[u8],
+        logger: impl Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
             + Sync
             + Send
             + 'static,
-        G: Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
-            + Sync
-            + Send
-            + 'static,
-    {
+        wasi: Option<WasiParams>,
+    ) -> Result<Self> {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
         let state = Rc::new(RefCell::new(ModuleState::new_with_logger(
             id,
@@ -239,13 +235,14 @@ impl WapcHost {
             Box::new(logger),
         )));
         let instance_ref = Rc::new(RefCell::new(None));
-        let instance =
-            WapcHost::instance_from_buffer(buf, &wasi, instance_ref.clone(), state.clone())?;
+        let instance = WapcHost::instance_from_buffer(buf, &wasi, state.clone())?;
         instance_ref.replace(Some(instance));
+        let gc = guest_call_fn(instance_ref.clone())?;
         let mh = WapcHost {
             state,
             instance: instance_ref,
             wasidata: wasi,
+            guest_call_fn: gc,
         };
 
         mh.initialize()?;
@@ -255,7 +252,7 @@ impl WapcHost {
 
     /// Returns a reference to the unique identifier of this module. If a parent process
     /// has instantiated multiple `WapcHost`s, then the single static host call function
-    /// will be required to differentiate between modules. Use the unique ID as a differentiator
+    /// may be used to differentiate between modules.
     pub fn id(&self) -> u64 {
         self.state.borrow().id
     }
@@ -278,7 +275,7 @@ impl WapcHost {
         }
 
         let callresult: i32 = call!(
-            self.guest_call_fn()?,
+            self.guest_call_fn,
             inv.operation.len() as i32,
             inv.msg.len() as i32
         );
@@ -325,8 +322,7 @@ impl WapcHost {
             module.len()
         );
         let state = self.state.clone();
-        let new_instance =
-            WapcHost::instance_from_buffer(module, &self.wasidata, self.instance.clone(), state)?;
+        let new_instance = WapcHost::instance_from_buffer(module, &self.wasidata, state)?;
         self.instance.borrow_mut().replace(new_instance);
 
         self.initialize()
@@ -335,7 +331,6 @@ impl WapcHost {
     fn instance_from_buffer(
         buf: &[u8],
         wasi: &Option<WasiParams>,
-        instance_ref: Rc<RefCell<Option<Instance>>>,
         state: Rc<RefCell<ModuleState>>,
     ) -> Result<Instance> {
         let engine = Engine::default();
@@ -356,32 +351,9 @@ impl WapcHost {
         let module_registry =
             ModuleRegistry::new(&store, &preopen_dirs, &argv, &wasi.env_vars).unwrap();
 
-        let imports = arrange_imports(
-            &module,
-            state.clone(),
-            instance_ref.clone(),
-            store.clone(),
-            &module_registry,
-        );
+        let imports = arrange_imports(&module, state.clone(), store.clone(), &module_registry);
 
         Ok(wasmtime::Instance::new(&module, imports?.as_slice()).unwrap())
-    }
-
-    // TODO: make this cacheable
-    fn guest_call_fn(&self) -> Result<HostRef<Func>> {
-        if let Some(ext) = self
-            .instance
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .get_export(GUEST_CALL)
-        {
-            Ok(HostRef::new(ext.func().unwrap().clone()))
-        } else {
-            Err(errors::new(errors::ErrorKind::GuestCallFailure(
-                "Guest module did not export __guest_call function!".to_string(),
-            )))
-        }
     }
 
     fn initialize(&self) -> Result<()> {
@@ -403,6 +375,18 @@ impl WapcHost {
     }
 }
 
+// Called once, then the result is cached. This returns a `Func` that corresponds
+// to the `__guest_call` export
+fn guest_call_fn(instance: Rc<RefCell<Option<Instance>>>) -> Result<HostRef<Func>> {
+    if let Some(ext) = instance.borrow().as_ref().unwrap().get_export(GUEST_CALL) {
+        Ok(HostRef::new(ext.func().unwrap().clone()))
+    } else {
+        Err(errors::new(errors::ErrorKind::GuestCallFailure(
+            "Guest module did not export __guest_call function!".to_string(),
+        )))
+    }
+}
+
 /// wasmtime requires that the list of callbacks be "zippable" with the list
 /// of module imports. In order to ensure that both lists are in the same
 /// order, we have to loop through the module imports and instantiate the
@@ -411,7 +395,6 @@ impl WapcHost {
 fn arrange_imports(
     module: &Module,
     state: Rc<RefCell<ModuleState>>,
-    instance: Rc<RefCell<Option<Instance>>>,
     store: Store,
     mod_registry: &ModuleRegistry,
 ) -> Result<Vec<Extern>> {
@@ -424,7 +407,6 @@ fn arrange_imports(
                     HOST_NAMESPACE => Some(callback_for_import(
                         imp.name(),
                         state.clone(),
-                        instance.clone(),
                         store.clone(),
                     )),
                     // TODO: to forcibly block the use of WASI, these should error
@@ -458,40 +440,17 @@ fn arrange_imports(
         .collect())
 }
 
-fn callback_for_import(
-    import: &str,
-    state: Rc<RefCell<ModuleState>>,
-    instance_ref: Rc<RefCell<Option<Instance>>>,
-    store: Store,
-) -> Extern {
+fn callback_for_import(import: &str, state: Rc<RefCell<ModuleState>>, store: Store) -> Extern {
     match import {
-        HOST_CONSOLE_LOG => {
-            callbacks::ConsoleLog::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        HOST_CALL => {
-            callbacks::HostCall::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        GUEST_REQUEST_FN => {
-            callbacks::GuestRequest::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        HOST_RESPONSE_FN => {
-            callbacks::HostResponse::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        HOST_RESPONSE_LEN_FN => {
-            callbacks::HostResponseLen::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        GUEST_RESPONSE_FN => {
-            callbacks::GuestResponse::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        GUEST_ERROR_FN => {
-            callbacks::GuestError::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        HOST_ERROR_FN => {
-            callbacks::HostError::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
-        HOST_ERROR_LEN_FN => {
-            callbacks::HostErrorLen::as_func(state.clone(), instance_ref.clone(), store).into()
-        }
+        HOST_CONSOLE_LOG => callbacks::console_log_func(&store, state.clone()).into(),
+        HOST_CALL => callbacks::host_call_func(&store, state.clone()).into(),
+        GUEST_REQUEST_FN => callbacks::guest_request_func(&store, state.clone()).into(),
+        HOST_RESPONSE_FN => callbacks::host_response_func(&store, state.clone()).into(),
+        HOST_RESPONSE_LEN_FN => callbacks::host_response_len_func(&store, state.clone()).into(),
+        GUEST_RESPONSE_FN => callbacks::guest_response_func(&store, state.clone()).into(),
+        GUEST_ERROR_FN => callbacks::guest_error_func(&store, state.clone()).into(),
+        HOST_ERROR_FN => callbacks::host_error_func(&store, state.clone()).into(),
+        HOST_ERROR_LEN_FN => callbacks::host_error_len_func(&store, state.clone()).into(),
         _ => unreachable!(),
     }
 }

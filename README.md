@@ -1,3 +1,4 @@
+![Rust](https://github.com/wapc/wapc-rust/workflows/Rust/badge.svg)
 ![crates.io](https://img.shields.io/crates/v/wapc.svg)&nbsp;
 ![license](https://img.shields.io/crates/l/wapc.svg)
 

@@ -1,5 +1,4 @@
 ![crates.io](https://img.shields.io/crates/v/wapc.svg)&nbsp;
-![travis](https://travis-ci.org/wapc/wapc-rust.svg?branch=master)&nbsp;
 ![license](https://img.shields.io/crates/l/wapc.svg)
 
 # waPC
@@ -33,5 +32,3 @@ $ cargo run --example demo
 ```
 
 waPC utilizes the [Bytecode Alliance](https://bytecodealliance.org/) runtime [wasmtime](https://github.com/bytecodealliance/wasmtime) for low-level WebAssembly compilation and execution.
-
-**NOTE** - The current version of waPC does not support loading WASI modules. That is only a temporary limitation expected to go away in the next version.

@@ -260,7 +260,7 @@ pub(crate) fn host_error_len_func(store: &Store, state: Rc<RefCell<ModuleState>>
 fn get_caller_memory(caller: &Caller) -> Result<HostRef<Memory>, anyhow::Error> {
     let memory = caller
         .get_export("memory")
-        .map(|e| e.memory().cloned().unwrap());
+        .map(|e| e.into_memory().unwrap());
     Ok(HostRef::new(memory.unwrap()))
 }
 

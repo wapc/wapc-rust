@@ -364,7 +364,7 @@ impl WapcHost {
             .unwrap()
             .get_export("_start")
         {
-            ext.func().unwrap().call(&[]).map(|_| ()).map_err(|_err| {
+            ext.into_func().unwrap().call(&[]).map(|_| ()).map_err(|_err| {
                 errors::new(errors::ErrorKind::GuestCallFailure(
                     "Error invoking _start function!".to_string(),
                 ))
@@ -379,7 +379,7 @@ impl WapcHost {
 // to the `__guest_call` export
 fn guest_call_fn(instance: Rc<RefCell<Option<Instance>>>) -> Result<HostRef<Func>> {
     if let Some(ext) = instance.borrow().as_ref().unwrap().get_export(GUEST_CALL) {
-        Ok(HostRef::new(ext.func().unwrap().clone()))
+        Ok(HostRef::new(ext.into_func().unwrap().clone()))
     } else {
         Err(errors::new(errors::ErrorKind::GuestCallFailure(
             "Guest module did not export __guest_call function!".to_string(),
@@ -399,8 +399,7 @@ fn arrange_imports(
     mod_registry: &ModuleRegistry,
 ) -> Result<Vec<Extern>> {
     Ok(module
-        .imports()
-        .iter()
+        .imports()        
         .filter_map(|imp| {
             if let ExternType::Func(_) = imp.ty() {
                 match imp.module() {

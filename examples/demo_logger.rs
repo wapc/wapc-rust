@@ -13,7 +13,7 @@ fn load_file() -> Vec<u8> {
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let module_bytes = load_file();
-    let mut host = WapcHost::new_with_logger(host_callback, &module_bytes, logger, None)?;
+    let host = WapcHost::new_with_logger(host_callback, &module_bytes, logger, None)?;
 
     println!("Calling guest (wasm) function");
     let res = host.call("wapc:sample!Hello", b"this is a test")?;

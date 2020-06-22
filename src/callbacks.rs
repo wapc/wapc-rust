@@ -3,7 +3,7 @@ use crate::{HostCallback, LogCallback};
 use std::cell::RefCell;
 use std::rc::Rc;
 use wasmtime::Memory;
-use wasmtime::{Caller, Func, FuncType, HostRef, Store, Val, ValType};
+use wasmtime::{Caller, Func, FuncType, Store, Val, ValType};
 
 #[derive(Default)]
 pub(crate) struct ModuleState {
@@ -257,15 +257,14 @@ pub(crate) fn host_error_len_func(store: &Store, state: Rc<RefCell<ModuleState>>
     )
 }
 
-fn get_caller_memory(caller: &Caller) -> Result<HostRef<Memory>, anyhow::Error> {
+fn get_caller_memory(caller: &Caller) -> Result<Memory, anyhow::Error> {
     let memory = caller
         .get_export("memory")
         .map(|e| e.into_memory().unwrap());
-    Ok(HostRef::new(memory.unwrap()))
+    Ok(memory.unwrap())
 }
 
-fn get_vec_from_memory(mem: HostRef<Memory>, ptr: i32, len: i32) -> Vec<u8> {
-    let mem = mem.borrow_mut();
+fn get_vec_from_memory(mem: Memory, ptr: i32, len: i32) -> Vec<u8> {
     let data = unsafe { mem.data_unchecked_mut() };
     data[ptr as usize..(ptr + len) as usize]
         .iter()
@@ -273,8 +272,7 @@ fn get_vec_from_memory(mem: HostRef<Memory>, ptr: i32, len: i32) -> Vec<u8> {
         .collect()
 }
 
-fn write_bytes_to_memory(memory: HostRef<Memory>, ptr: i32, slice: &[u8]) {
-    let memory = memory.borrow_mut();
+fn write_bytes_to_memory(memory: Memory, ptr: i32, slice: &[u8]) {
     let data = unsafe { memory.data_unchecked_mut() };
     // TODO: upgrade this to a faster memory write
     for idx in 0..slice.len() {

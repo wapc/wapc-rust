@@ -13,7 +13,7 @@ fn load_file() -> Vec<u8> {
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let module_bytes = load_file();
-    let mut host = WapcHost::new(host_callback, &module_bytes, None)?;
+    let host = WapcHost::new(host_callback, &module_bytes, None)?;
 
     println!("Calling guest (wasm) function written in TinyGo");
     let res = host.call("hello", b"this is a test")?;

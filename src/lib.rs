@@ -264,7 +264,7 @@ impl WapcHost {
     /// It is worth noting that the _first_ time `call` is invoked, the WebAssembly module
     /// will be JIT-compiled. This can take up to a few seconds on debug .wasm files, but
     /// all subsequent calls will be "hot" and run at near-native speeds.    
-    pub fn call(self, op: &str, payload: &[u8]) -> Result<Vec<u8>> {
+    pub fn call(&self, op: &str, payload: &[u8]) -> Result<Vec<u8>> {
         let inv = Invocation::new(op, payload.to_vec());
 
         {

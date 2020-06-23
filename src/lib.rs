@@ -28,7 +28,7 @@
 //! # }
 //! pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let module_bytes = load_file();
-//!     let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
+//!     let host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
 //!         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
 //!         Ok(vec![])
 //!     }, &module_bytes, None)?;
@@ -76,7 +76,7 @@ use wasmtime::*;
 
 macro_rules!  call {
     ($func:expr, $($p:expr),*) => {
-      match $func.borrow().call(&[$($p.into()),*]) {
+      match $func.call(&[$($p.into()),*]) {
         Ok(result) => {
           let result: i32 = result[0].i32().unwrap();
           result
@@ -171,7 +171,7 @@ pub struct WapcHost {
     state: Rc<RefCell<ModuleState>>,
     instance: Rc<RefCell<Option<Instance>>>,
     wasidata: Option<WasiParams>,
-    guest_call_fn: HostRef<Func>,
+    guest_call_fn: Func,
 }
 
 impl WapcHost {
@@ -264,7 +264,7 @@ impl WapcHost {
     /// It is worth noting that the _first_ time `call` is invoked, the WebAssembly module
     /// will be JIT-compiled. This can take up to a few seconds on debug .wasm files, but
     /// all subsequent calls will be "hot" and run at near-native speeds.    
-    pub fn call(&mut self, op: &str, payload: &[u8]) -> Result<Vec<u8>> {
+    pub fn call(&self, op: &str, payload: &[u8]) -> Result<Vec<u8>> {
         let inv = Invocation::new(op, payload.to_vec());
 
         {
@@ -335,7 +335,7 @@ impl WapcHost {
     ) -> Result<Instance> {
         let engine = Engine::default();
         let store = Store::new(&engine);
-        let module = Module::new(&store, buf).unwrap();
+        let module = Module::new(&engine, buf).unwrap();
 
         let d = WasiParams::default();
         let wasi = match wasi {
@@ -353,7 +353,7 @@ impl WapcHost {
 
         let imports = arrange_imports(&module, state.clone(), store.clone(), &module_registry);
 
-        Ok(wasmtime::Instance::new(&module, imports?.as_slice()).unwrap())
+        Ok(wasmtime::Instance::new(&store, &module, imports?.as_slice()).unwrap())
     }
 
     fn initialize(&self) -> Result<()> {
@@ -364,11 +364,15 @@ impl WapcHost {
             .unwrap()
             .get_export("_start")
         {
-            ext.into_func().unwrap().call(&[]).map(|_| ()).map_err(|_err| {
-                errors::new(errors::ErrorKind::GuestCallFailure(
-                    "Error invoking _start function!".to_string(),
-                ))
-            })
+            ext.into_func()
+                .unwrap()
+                .call(&[])
+                .map(|_| ())
+                .map_err(|_err| {
+                    errors::new(errors::ErrorKind::GuestCallFailure(
+                        "Error invoking _start function!".to_string(),
+                    ))
+                })
         } else {
             Ok(())
         }
@@ -377,9 +381,9 @@ impl WapcHost {
 
 // Called once, then the result is cached. This returns a `Func` that corresponds
 // to the `__guest_call` export
-fn guest_call_fn(instance: Rc<RefCell<Option<Instance>>>) -> Result<HostRef<Func>> {
-    if let Some(ext) = instance.borrow().as_ref().unwrap().get_export(GUEST_CALL) {
-        Ok(HostRef::new(ext.into_func().unwrap().clone()))
+fn guest_call_fn(instance: Rc<RefCell<Option<Instance>>>) -> Result<Func> {
+    if let Some(func) = instance.borrow().as_ref().unwrap().get_func(GUEST_CALL) {
+        Ok(func)
     } else {
         Err(errors::new(errors::ErrorKind::GuestCallFailure(
             "Guest module did not export __guest_call function!".to_string(),
@@ -399,7 +403,7 @@ fn arrange_imports(
     mod_registry: &ModuleRegistry,
 ) -> Result<Vec<Extern>> {
     Ok(module
-        .imports()        
+        .imports()
         .filter_map(|imp| {
             if let ExternType::Func(_) = imp.ty() {
                 match imp.module() {

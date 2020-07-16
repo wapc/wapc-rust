@@ -1,6 +1,6 @@
 [package]
 name = "wapc"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["waPC team <alothien@gmail.com>"]
 edition = "2018"
 description = "Rust WebAssembly Host Runtime Conforming to the waPC Standard"
@@ -13,11 +13,11 @@ categories = ["wasm", "api-bindings"]
 exclude = [".assets"]
 
 [dependencies]
-log = "0.4.8"
+log = "0.4.11"
 env_logger = "0.7"
 serde = { version = "1.0.114", features = ["derive"] }
-serde_json = "1.0.55"
-wasmtime = "0.18.0"
-wasmtime-wasi = "0.18.0"
+serde_json = "1.0.56"
+wasmtime = "0.19.0"
+wasmtime-wasi = "0.19.1"
 anyhow = "1.0.31"
-wasi-common = "0.18.0"
+wasi-common = "0.19.1"

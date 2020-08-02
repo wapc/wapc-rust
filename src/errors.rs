@@ -86,3 +86,12 @@ impl From<std::io::Error> for Error {
         Error(Box::new(ErrorKind::IO(source)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[allow(dead_code)]
+    fn assert_sync_send<T: Send + Sync>() {}
+    const _: fn() = || {
+        assert_sync_send::<super::Error>()
+    };
+}

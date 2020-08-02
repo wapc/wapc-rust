@@ -29,7 +29,7 @@ pub enum ErrorKind {
     NoSuchFunction(String),
     IO(std::io::Error),
     WasmMisc(String),
-    HostCallFailure(Box<dyn StdError>),
+    HostCallFailure(Box<dyn StdError + Sync + Send>),
     GuestCallFailure(String),
 }
 

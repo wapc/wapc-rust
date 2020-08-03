@@ -10,7 +10,7 @@ fn load_file() -> Vec<u8> {
     buf
 }
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::init();
     let module_bytes = load_file();
     let host = WapcHost::new_with_logger(host_callback, &module_bytes, logger, None)?;
@@ -28,7 +28,7 @@ fn host_callback(
     ns: &str,
     op: &str,
     payload: &[u8],
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     println!(
         "Guest {} invoked '{}->{}:{}' with payload of {}",
         id,
@@ -40,7 +40,7 @@ fn host_callback(
     Ok(vec![])
 }
 
-fn logger(id: u64, msg: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn logger(id: u64, msg: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("***> [{}] {}", id, msg);
     Ok(())
 }

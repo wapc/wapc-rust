@@ -26,7 +26,7 @@
 //! # fn load_wasi_file() -> Vec<u8> {
 //! #    include_bytes!("../.assets/hello_wasi.wasm").to_vec()
 //! # }
-//! pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! pub fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //!     let module_bytes = load_file();
 //!     let host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &[u8]| {
 //!         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());
@@ -111,12 +111,12 @@ const GUEST_CALL: &str = "__guest_call";
 const WASI_UNSTABLE_NAMESPACE: &str = "wasi_unstable";
 const WASI_SNAPSHOT_PREVIEW1_NAMESPACE: &str = "wasi_snapshot_preview1";
 
-type HostCallback = dyn Fn(u64, &str, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+type HostCallback = dyn Fn(u64, &str, &str, &str, &[u8]) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
     + Sync
     + Send
     + 'static;
 
-type LogCallback = dyn Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
+type LogCallback = dyn Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>
     + Sync
     + Send
     + 'static;
@@ -183,7 +183,7 @@ impl WapcHost {
                 &str,
                 &str,
                 &[u8],
-            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
             + 'static
             + Sync
             + Send,
@@ -217,12 +217,12 @@ impl WapcHost {
                 &str,
                 &str,
                 &[u8],
-            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error>>
+            ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
             + 'static
             + Sync
             + Send,
         buf: &[u8],
-        logger: impl Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error>>
+        logger: impl Fn(u64, &str) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>
             + Sync
             + Send
             + 'static,

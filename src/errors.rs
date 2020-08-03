@@ -29,7 +29,7 @@ pub enum ErrorKind {
     NoSuchFunction(String),
     IO(std::io::Error),
     WasmMisc(String),
-    HostCallFailure(Box<dyn StdError>),
+    HostCallFailure(Box<dyn StdError + Sync + Send>),
     GuestCallFailure(String),
 }
 
@@ -85,4 +85,13 @@ impl From<std::io::Error> for Error {
     fn from(source: std::io::Error) -> Error {
         Error(Box::new(ErrorKind::IO(source)))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #[allow(dead_code)]
+    fn assert_sync_send<T: Send + Sync>() {}
+    const _: fn() = || {
+        assert_sync_send::<super::Error>()
+    };
 }

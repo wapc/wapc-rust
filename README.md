@@ -14,7 +14,7 @@ The following is a simple example of synchronous, bi-directional procedure calls
 extern crate wapc;
 use wapc::prelude::*;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let module = load_file();
     let mut host = WapcHost::new(|id: u64, bd: &str, ns: &str, op: &str, payload: &str|{
         println!("Guest {} invoked '{}->{}:{}' with payload of {} bytes", id, bd, ns, op, payload.len());

@@ -91,7 +91,5 @@ impl From<std::io::Error> for Error {
 mod tests {
     #[allow(dead_code)]
     fn assert_sync_send<T: Send + Sync>() {}
-    const _: fn() = || {
-        assert_sync_send::<super::Error>()
-    };
+    const _: fn() = || assert_sync_send::<super::Error>();
 }

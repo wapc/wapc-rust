@@ -1,6 +1,6 @@
 [package]
 name = "wapc"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["waPC team <alothien@gmail.com>"]
 edition = "2018"
 description = "An engine-pluggable WebAssembly Host Runtime implementing the waPC Standard"

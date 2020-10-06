@@ -63,8 +63,8 @@
 //!
 //! waPC is _reactive_. Guest modules cannot initiate host calls without first handling a call
 //! initiated by the host. It is up to the runtime engine provider (e.g. `wasmtime` or `wasm3`)
-//! if a start function is called during startup. Guest modules can synchronously make as many host calls
-//! as they like, but keep in mind that if a host call takes too long or fails, it'll cause the initiating
+//! to invoke the required start functions (if present) during initialization. Guest modules can
+//! synchronously make as many host calls as they like, but keep in mind that if a host call takes too long or fails, it'll cause the initiating
 //! guest call to also fail.
 //!
 //! In summary, keep host callbacks fast and and free of panic-friendly `unwrap()`s, and do not spawn new threads
@@ -126,8 +126,6 @@ pub type Result<T> = std::result::Result<T, errors::Error>;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use std::cell::RefCell;
-
 use std::error::Error;
 use std::sync::{Arc, RwLock};
 
@@ -153,6 +151,11 @@ impl WapcFunctions {
 
     // -- Functions called by host, exported by guest
     pub const GUEST_CALL: &'static str = "__guest_call";
+    pub const WAPC_INIT: &'static str = "wapc_init";
+    pub const TINYGO_START: &'static str = "_start";
+
+    /// Start functions to attempt to call - order is important
+    pub const REQUIRED_STARTS: [&'static str;2] = [Self::TINYGO_START, Self::WAPC_INIT];
 }
 
 /// Parameters defining the options for enabling WASI on a module (if applicable)
@@ -279,7 +282,7 @@ impl ModuleState {
 /// An engine provider is any code that encapsulates low-level WebAssembly interactions such
 /// as reading from and writing to linear memory, executing functions, and mapping imports
 /// in a way that conforms to the waPC conversation protocol.
-pub trait WebAssemblyEngineProvider {
+pub trait WebAssemblyEngineProvider: Sync + Send {
     /// Tell the engine provider that it can do whatever processing it needs to do for
     /// initialization and give it access to the module state
     fn init(
@@ -362,7 +365,7 @@ impl Invocation {
 /// `WapcHost` makes no assumptions about the contents or format of either the payload or the
 /// operation name, other than that the operation name is a UTF-8 encoded string.
 pub struct WapcHost {
-    engine: RefCell<Box<dyn WebAssemblyEngineProvider>>,
+    engine: Arc<RwLock<Box<dyn WebAssemblyEngineProvider>>>,
     state: Arc<ModuleState>,
 }
 
@@ -388,7 +391,7 @@ impl WapcHost {
         let state = Arc::new(ModuleState::new(Box::new(host_callback), id));
 
         let mh = WapcHost {
-            engine: RefCell::new(engine),
+            engine: Arc::new(RwLock::new(engine)),
             state: state.clone(),
         };
 
@@ -398,7 +401,7 @@ impl WapcHost {
     }
 
     fn initialize(&self, state: Arc<ModuleState>) -> Result<()> {
-        match self.engine.borrow_mut().init(state) {
+        match self.engine.write().unwrap().init(state) {
             Ok(_) => Ok(()),
             Err(e) => Err(crate::errors::new(
                 crate::errors::ErrorKind::GuestCallFailure(format!(
@@ -436,7 +439,8 @@ impl WapcHost {
 
         let callresult = match self
             .engine
-            .borrow_mut()
+            .write()
+            .unwrap()
             .call(inv.operation.len() as i32, inv.msg.len() as i32)
         {
             Ok(c) => c,
@@ -485,7 +489,7 @@ impl WapcHost {
     /// like the environment variables, mapped directories, pre-opened files, etc. Not abiding by this could lead
     /// to privilege escalation attacks or non-deterministic behavior after the swap.
     pub fn replace_module(&self, module: &[u8]) -> Result<()> {
-        match self.engine.borrow_mut().replace(module) {
+        match self.engine.write().unwrap().replace(module) {
             Ok(_) => Ok(()),
             Err(e) => Err(errors::new(errors::ErrorKind::GuestCallFailure(
                 format!("Failed to swap module bytes: {}", e)

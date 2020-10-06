@@ -127,6 +127,7 @@ pub type Result<T> = std::result::Result<T, errors::Error>;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use std::error::Error;
+use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
 static GLOBAL_MODULE_COUNT: AtomicU64 = AtomicU64::new(1);
@@ -282,7 +283,7 @@ impl ModuleState {
 /// An engine provider is any code that encapsulates low-level WebAssembly interactions such
 /// as reading from and writing to linear memory, executing functions, and mapping imports
 /// in a way that conforms to the waPC conversation protocol.
-pub trait WebAssemblyEngineProvider: Sync + Send {
+pub trait WebAssemblyEngineProvider {
     /// Tell the engine provider that it can do whatever processing it needs to do for
     /// initialization and give it access to the module state
     fn init(
@@ -365,7 +366,7 @@ impl Invocation {
 /// `WapcHost` makes no assumptions about the contents or format of either the payload or the
 /// operation name, other than that the operation name is a UTF-8 encoded string.
 pub struct WapcHost {
-    engine: Arc<RwLock<Box<dyn WebAssemblyEngineProvider>>>,
+    engine: RefCell<Box<dyn WebAssemblyEngineProvider>>,
     state: Arc<ModuleState>,
 }
 
@@ -391,7 +392,7 @@ impl WapcHost {
         let state = Arc::new(ModuleState::new(Box::new(host_callback), id));
 
         let mh = WapcHost {
-            engine: Arc::new(RwLock::new(engine)),
+            engine: RefCell::new(engine),
             state: state.clone(),
         };
 
@@ -401,7 +402,7 @@ impl WapcHost {
     }
 
     fn initialize(&self, state: Arc<ModuleState>) -> Result<()> {
-        match self.engine.write().unwrap().init(state) {
+        match self.engine.borrow_mut().init(state) {
             Ok(_) => Ok(()),
             Err(e) => Err(crate::errors::new(
                 crate::errors::ErrorKind::GuestCallFailure(format!(
@@ -439,8 +440,7 @@ impl WapcHost {
 
         let callresult = match self
             .engine
-            .write()
-            .unwrap()
+            .borrow_mut()
             .call(inv.operation.len() as i32, inv.msg.len() as i32)
         {
             Ok(c) => c,
@@ -489,7 +489,7 @@ impl WapcHost {
     /// like the environment variables, mapped directories, pre-opened files, etc. Not abiding by this could lead
     /// to privilege escalation attacks or non-deterministic behavior after the swap.
     pub fn replace_module(&self, module: &[u8]) -> Result<()> {
-        match self.engine.write().unwrap().replace(module) {
+        match self.engine.borrow_mut().replace(module) {
             Ok(_) => Ok(()),
             Err(e) => Err(errors::new(errors::ErrorKind::GuestCallFailure(
                 format!("Failed to swap module bytes: {}", e)

@@ -63,8 +63,8 @@
 //!
 //! waPC is _reactive_. Guest modules cannot initiate host calls without first handling a call
 //! initiated by the host. It is up to the runtime engine provider (e.g. `wasmtime` or `wasm3`)
-//! if a start function is called during startup. Guest modules can synchronously make as many host calls
-//! as they like, but keep in mind that if a host call takes too long or fails, it'll cause the initiating
+//! to invoke the required start functions (if present) during initialization. Guest modules can
+//! synchronously make as many host calls as they like, but keep in mind that if a host call takes too long or fails, it'll cause the initiating
 //! guest call to also fail.
 //!
 //! In summary, keep host callbacks fast and and free of panic-friendly `unwrap()`s, and do not spawn new threads
@@ -126,9 +126,8 @@ pub type Result<T> = std::result::Result<T, errors::Error>;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use std::cell::RefCell;
-
 use std::error::Error;
+use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
 static GLOBAL_MODULE_COUNT: AtomicU64 = AtomicU64::new(1);
@@ -153,6 +152,11 @@ impl WapcFunctions {
 
     // -- Functions called by host, exported by guest
     pub const GUEST_CALL: &'static str = "__guest_call";
+    pub const WAPC_INIT: &'static str = "wapc_init";
+    pub const TINYGO_START: &'static str = "_start";
+
+    /// Start functions to attempt to call - order is important
+    pub const REQUIRED_STARTS: [&'static str;2] = [Self::TINYGO_START, Self::WAPC_INIT];
 }
 
 /// Parameters defining the options for enabling WASI on a module (if applicable)

@@ -120,15 +120,15 @@ extern crate log;
 
 pub mod errors;
 
-
 /// A result type for errors that occur within the wapc library
 pub type Result<T> = std::result::Result<T, errors::Error>;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use std::error::Error;
-use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 static GLOBAL_MODULE_COUNT: AtomicU64 = AtomicU64::new(1);
 
@@ -156,11 +156,11 @@ impl WapcFunctions {
     pub const TINYGO_START: &'static str = "_start";
 
     /// Start functions to attempt to call - order is important
-    pub const REQUIRED_STARTS: [&'static str;2] = [Self::TINYGO_START, Self::WAPC_INIT];
+    pub const REQUIRED_STARTS: [&'static str; 2] = [Self::TINYGO_START, Self::WAPC_INIT];
 }
 
 /// Parameters defining the options for enabling WASI on a module (if applicable)
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WasiParams {
     pub argv: Vec<String>,
     pub map_dirs: Vec<(String, String)>,
@@ -215,32 +215,32 @@ impl ModuleState {
 impl ModuleState {
     /// Retrieves the value, if any, of the current guest request
     pub fn get_guest_request(&self) -> Option<Invocation> {
-        self.guest_request.read().unwrap().clone()
+        self.guest_request.read().clone()
     }
 
     /// Retrieves the value of the current host response
     pub fn get_host_response(&self) -> Option<Vec<u8>> {
-        self.host_response.read().unwrap().clone()
+        self.host_response.read().clone()
     }
 
     /// Sets a value indicating that an error occurred inside the execution of a guest call
     pub fn set_guest_error(&self, error: String) {
-        *self.guest_error.write().unwrap() = Some(error);
+        *self.guest_error.write() = Some(error);
     }
 
     /// Sets the value indicating the response data from a guest call
     pub fn set_guest_response(&self, response: Vec<u8>) {
-        *self.guest_response.write().unwrap() = Some(response);
+        *self.guest_response.write() = Some(response);
     }
 
     /// Queries the value of the current guest response
     pub fn get_guest_response(&self) -> Option<Vec<u8>> {
-        self.guest_response.read().unwrap().clone()
+        self.guest_response.read().clone()
     }
 
     /// Queries the value of the current host error
     pub fn get_host_error(&self) -> Option<String> {
-        self.host_error.read().unwrap().clone()
+        self.host_error.read().clone()
     }
 
     /// Invoked when the guest module wishes to make a call on the host
@@ -252,23 +252,23 @@ impl ModuleState {
         payload: &[u8],
     ) -> std::result::Result<i32, Box<dyn Error>> {
         let id = {
-            *self.host_response.write().unwrap() = None;
-            *self.host_error.write().unwrap() = None;
+            *self.host_response.write() = None;
+            *self.host_error.write() = None;
             self.id
         };
         let result = {
             match self.host_callback {
-                Some(ref f) => f(id, binding, namespace, operation, &payload),
+                Some(ref f) => f(id, binding, namespace, operation, payload),
                 None => Err("Missing host callback function!".into()),
             }
         };
         Ok(match result {
             Ok(v) => {
-                *self.host_response.write().unwrap() = Some(v);
+                *self.host_response.write() = Some(v);
                 1
             }
             Err(e) => {
-                *self.host_error.write().unwrap() = Some(format!("{}", e));
+                *self.host_error.write() = Some(format!("{}", e));
                 0
             }
         })
@@ -331,15 +331,15 @@ pub trait ModuleHost {
 }
 
 type HostCallback = dyn Fn(
-    u64,
-    &str,
-    &str,
-    &str,
-    &[u8],
-) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
-+ Sync
-+ Send
-+ 'static;
+        u64,
+        &str,
+        &str,
+        &str,
+        &[u8],
+    ) -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
+    + Sync
+    + Send
+    + 'static;
 
 #[derive(Debug, Clone)]
 /// Represents a waPC invocation, which is a combination of an operation string and the
@@ -366,7 +366,7 @@ impl Invocation {
 /// `WapcHost` makes no assumptions about the contents or format of either the payload or the
 /// operation name, other than that the operation name is a UTF-8 encoded string.
 pub struct WapcHost {
-    engine: RefCell<Box<dyn WebAssemblyEngineProvider>>,
+    engine: RwLock<Box<dyn WebAssemblyEngineProvider + Send + Sync>>,
     state: Arc<ModuleState>,
 }
 
@@ -374,25 +374,25 @@ impl WapcHost {
     /// Creates a new instance of a waPC-compliant host runtime paired with a given
     /// low-level engine provider
     pub fn new(
-        engine: Box<dyn WebAssemblyEngineProvider>,
+        engine: Box<dyn WebAssemblyEngineProvider + Send + Sync>,
         host_callback: impl Fn(
-            u64,
-            &str,
-            &str,
-            &str,
-            &[u8],
-        )
-            -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
-        + 'static
-        + Sync
-        + Send,
+                u64,
+                &str,
+                &str,
+                &str,
+                &[u8],
+            )
+                -> std::result::Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>
+            + 'static
+            + Sync
+            + Send,
     ) -> Result<Self> {
         let id = GLOBAL_MODULE_COUNT.fetch_add(1, Ordering::SeqCst);
-        //let state = Rc::new(RefCell::new(ModuleState::new(id, Box::new(host_callback))));
+
         let state = Arc::new(ModuleState::new(Box::new(host_callback), id));
 
         let mh = WapcHost {
-            engine: RefCell::new(engine),
+            engine: RwLock::new(engine),
             state: state.clone(),
         };
 
@@ -402,7 +402,7 @@ impl WapcHost {
     }
 
     fn initialize(&self, state: Arc<ModuleState>) -> Result<()> {
-        match self.engine.borrow_mut().init(state) {
+        match self.engine.write().init(state) {
             Ok(_) => Ok(()),
             Err(e) => Err(crate::errors::new(
                 crate::errors::ErrorKind::GuestCallFailure(format!(
@@ -422,7 +422,7 @@ impl WapcHost {
 
     /// Invokes the `__guest_call` function within the guest module as per the waPC specification.
     /// Provide an operation name and an opaque payload of bytes and the function returns a `Result`
-    /// containing either an error or an opaque reply of bytes.    
+    /// containing either an error or an opaque reply of bytes.
     ///
     /// It is worth noting that the _first_ time `call` is invoked, the WebAssembly module
     /// might incur a "cold start" penalty, depending on which underlying engine you're using. This
@@ -431,16 +431,16 @@ impl WapcHost {
         let inv = Invocation::new(op, payload.to_vec());
 
         {
-            *self.state.guest_response.write().unwrap() = None;
-            *self.state.guest_request.write().unwrap() = Some((inv).clone());
-            *self.state.guest_error.write().unwrap() = None;
-            *self.state.host_response.write().unwrap() = None;
-            *self.state.host_error.write().unwrap() = None;
+            *self.state.guest_response.write() = None;
+            *self.state.guest_request.write() = Some((inv).clone());
+            *self.state.guest_error.write() = None;
+            *self.state.host_response.write() = None;
+            *self.state.host_error.write() = None;
         }
 
         let callresult = match self
             .engine
-            .borrow_mut()
+            .write()
             .call(inv.operation.len() as i32, inv.msg.len() as i32)
         {
             Ok(c) => c,
@@ -454,7 +454,7 @@ impl WapcHost {
 
         if callresult == 0 {
             // invocation failed
-            let lock = self.state.guest_error.read().unwrap();
+            let lock = self.state.guest_error.read();
             match *lock {
                 Some(ref s) => Err(errors::new(errors::ErrorKind::GuestCallFailure(s.clone()))),
                 None => Err(errors::new(errors::ErrorKind::GuestCallFailure(
@@ -463,12 +463,14 @@ impl WapcHost {
             }
         } else {
             // invocation succeeded
-            match *self.state.guest_response.read().unwrap() {
+            match *self.state.guest_response.read() {
                 Some(ref e) => Ok(e.clone()),
                 None => {
-                    let lock = self.state.guest_error.read().unwrap();
+                    let lock = self.state.guest_error.read();
                     match *lock {
-                        Some(ref s) => Err(errors::new(errors::ErrorKind::GuestCallFailure(s.clone()))),
+                        Some(ref s) => {
+                            Err(errors::new(errors::ErrorKind::GuestCallFailure(s.clone())))
+                        }
                         None => Err(errors::new(errors::ErrorKind::GuestCallFailure(
                             "No error message OR response set for call success".to_string(),
                         ))),
@@ -489,11 +491,28 @@ impl WapcHost {
     /// like the environment variables, mapped directories, pre-opened files, etc. Not abiding by this could lead
     /// to privilege escalation attacks or non-deterministic behavior after the swap.
     pub fn replace_module(&self, module: &[u8]) -> Result<()> {
-        match self.engine.borrow_mut().replace(module) {
+        match self.engine.write().replace(module) {
             Ok(_) => Ok(()),
-            Err(e) => Err(errors::new(errors::ErrorKind::GuestCallFailure(
-                format!("Failed to swap module bytes: {}", e)
-            )))
+            Err(e) => Err(errors::new(errors::ErrorKind::GuestCallFailure(format!(
+                "Failed to swap module bytes: {}",
+                e
+            )))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<WapcHost>();
+    }
+
+    #[test]
+    fn test_sync() {
+        fn assert_sync<T: Sync>() {}
+        assert_sync::<WapcHost>();
     }
 }

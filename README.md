@@ -1,3 +1,15 @@
+----
+
+----
+
+ # This repository has moved
+ 
+ Please update your links to the [wapc/wapc-rs](https://github.com/wapc/wapc-rs) repository.
+ 
+----
+
+----
+
 ![Rust](https://github.com/wapc/wapc-rust/workflows/Rust/badge.svg)
 ![crates.io](https://img.shields.io/crates/v/wapc.svg)
 ![license](https://img.shields.io/crates/l/wapc.svg)
